@@ -1,0 +1,80 @@
+/* 이모티콘 아이템의 위치 기준 설정 */
+#recent_emoticon ul > li {
+  position: relative !important;
+}
+
+/* '닫기' 버튼 기본 스타일 */
+.emoji-delete-btn {
+  display: none;
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  font-size: 12px;
+  line-height: 14px;
+  text-align: center;
+  cursor: pointer;
+  z-index: 10;
+}
+
+.bg-dark {
+  background-color: rgba(255, 255, 255, 0.85);
+  color: black;
+}
+
+.bg-white {
+  background-color: rgba(0, 0, 0, 0.7);
+  color: white;
+}
+
+/* 이모티콘 아이템에 마우스를 올렸을 때 '닫기' 버튼 보이기 */
+#recent_emoticon ul > li:hover .emoji-delete-btn {
+  display: block !important;
+}
+
+.emoticon-subtitle-wrapper {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+/* 제목(strong) 요소가 불필요한 공간을 차지하지 않도록 설정 */
+.emoticon-subtitle-wrapper > strong {
+  margin-bottom: 0 !important;
+  width: 85%;
+}
+
+/* 휴지통 아이콘 버튼 기본 스타일 */
+#clear-all-emoticons-btn {
+  background: none;
+  background-color: #ff004f96;
+  border: none;
+  cursor: pointer;
+  font-size: 16px;
+  padding: 4px;
+  line-height: 1;
+  border-radius: 6px;
+  opacity: 0.6;
+}
+
+#clear-all-emoticons-btn:hover {
+  opacity: 1;
+}
+
+/* SVG 아이콘 <img> 태그의 스타일 */
+.trash-icon-svg {
+  width: 18px;
+  height: 18px;
+}
+
+#recent-emoticon-empty-msg {
+  color: rgba(var(--color-bg-07-rgb), 0.5);
+  padding: 68px 0 69px;
+  text-align: center;
+  font-size: 14px;
+  letter-spacing: -0.3px;
+  line-height: 20px;
+}

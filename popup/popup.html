@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <div id="title-wrapper">
+      <img src="../images/icon_500.png" />
+      <h1>치모티콘 정리</h1>
+    </div>
+
+    <div id="control-wrapper">
+      <button id="reload-btn" title="">
+        <img id="reload-icon" src="../images/restart_icon.svg" />
+        <img
+          id="update-icon"
+          src="../images/update_icon.svg"
+          style="display: none"
+        />
+      </button>
+
+      <div class="toggle-wrapper">
+        <label class="switch" title="'치모티콘 정리' ON/OFF">
+          <input type="checkbox" id="pause-toggle" />
+          <span class="slider"></span>
+        </label>
+      </div>
+    </div>
+
+    <div id="description-wrapper">
+      <div id="description-on" class="">
+        채팅창의
+        <span class="highlight">'최근 사용한 이모티콘'</span>
+        을 <br />
+        정리해보세요!
+      </div>
+      <div id="description-off" class=""><p>치모티콘 잠시 쉬는 중...</p></div>
+    </div>
+
+    <div id="update-notice">
+      새로운 버전이 적용되려면<br />치지직 새로고침이 필요해요!
+    </div>
+    <script src="popup.js"></script>
+  </body>
+</html>

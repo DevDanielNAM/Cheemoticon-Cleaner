@@ -1,0 +1,39 @@
+{
+  "manifest_version": 3,
+  "name": "치모티콘 정리",
+  "version": "1.0.0",
+  "description": "치지직(CHZZK) 채팅창의 '최근 사용한 이모티콘' 목록에서 이모티콘들을 정리할 수 있습니다.",
+  "icons": {
+    "16": "icon_16.png",
+    "48": "icon_48.png",
+    "128": "icon_128.png"
+  },
+  "permissions": ["storage", "tabs", "management"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["*://*.chzzk.naver.com/*"],
+      "js": ["content.js"],
+      "css": ["style.css"]
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "images/delete_icon_white.svg",
+        "images/delete_icon_dark.svg",
+        "images/icon_500.png",
+        "images/restart_icon.svg",
+        "images/update_icon.svg"
+      ],
+      "matches": ["*://*.chzzk.naver.com/*"]
+    }
+  ],
+  "host_permissions": ["*://*.chzzk.naver.com/*"],
+  "action": {
+    "default_title": "치모티콘 정리",
+    "default_popup": "popup/popup.html"
+  }
+}
