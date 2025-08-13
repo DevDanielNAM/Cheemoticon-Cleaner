@@ -3,20 +3,20 @@ document.addEventListener("DOMContentLoaded", () => {
   renderPopupUI();
 });
 
+// manifest.json 파일의 정보
+const manifest = chrome.runtime.getManifest();
+const version = manifest.version;
+
+const versionElement = document.createElement("div");
+versionElement.id = "version-display";
+versionElement.textContent = `v.${version}`;
+
+document.body.prepend(versionElement);
+
 /**
  * 현재 상태에 맞춰 팝업 UI를 그리고 이벤트 리스너를 설정하는 함수
  */
 function renderPopupUI() {
-  // manifest.json 파일의 정보
-  const manifest = chrome.runtime.getManifest();
-  const version = manifest.version;
-
-  const versionElement = document.createElement("div");
-  versionElement.id = "version-display";
-  versionElement.textContent = `v${version}`;
-
-  document.body.prepend(versionElement);
-
   const reloadBtn = document.getElementById("reload-btn");
   const updateNotice = document.getElementById("update-notice");
   const pauseToggle = document.getElementById("pause-toggle");
