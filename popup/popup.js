@@ -75,16 +75,16 @@ function applyUpdateAndReloadTabs() {
       chrome.storage.local.set({ isPaused: false });
     }
   });
+
   reloadModal(`치모티콘 정리를 <br>업데이트 합니다.`, 140);
-  // 열려있는 모든 치지직 탭을 새로고침
-  chrome.tabs.query({ url: "*://*.chzzk.naver.com/*" }, (tabs) => {
-    tabs.forEach((tab) => {
-      chrome.tabs.reload(tab.id);
-    });
-  });
+
   setTimeout(() => {
     chrome.storage.local.set({ updateNeeded: false });
-    chrome.runtime.sendMessage({ type: "NEW_VERSION_LOADED" });
+    // 2. 백그라운드에 '소프트 재적용'을 요청
+    chrome.runtime.sendMessage({ type: "REQUEST_SOFT_REAPPLY" });
+
+    // 3. 백그라운드에 '배지 제거'를 요청
+    chrome.runtime.sendMessage({ type: "CLEAR_UPDATE_BADGE" });
     window.close();
   }, 2400);
 }
@@ -134,9 +134,14 @@ function handlePauseToggle(event) {
   const modalCancelButton = document.querySelector(".modal-cancel-button");
   const modalConfirmButton = document.querySelector(".modal-confirm-button");
 
+  const modalInnetText =
+    actionText === "OFF"
+      ? `기능을 ${actionText}하려면 열려있는 모든 치지직 페이지를 새로고침해야 합니다.\n\n계속 진행하시겠습니까?`
+      : `치모티콘 정리를 ${actionText}하시겠습니까?`;
+
   modalContents.style.height = `${window.innerHeight - 20}px`;
   // 모달 내용 설정
-  modalContentText.innerText = `기능을 ${actionText}하려면 열려있는 모든 치지직 페이지를 새로고침해야 합니다.\n\n계속 진행하시겠습니까?`;
+  modalContentText.innerText = modalInnetText;
 
   // 모달을 화면에 표시
   modalWrapper.style.display = "block";
@@ -170,17 +175,23 @@ function applyPauseToggle(isPaused) {
   chrome.storage.local.get("updateNeeded", (data) => {
     // 업데이트가 필요한 상태에서 토글하면, 업데이트 상태도 함께 해제
     if (data.updateNeeded) {
-      chrome.runtime.sendMessage({ type: "NEW_VERSION_LOADED" });
+      chrome.runtime.sendMessage({ type: "CLEAR_UPDATE_BADGE" });
     }
 
     chrome.storage.local.set(
       { isPaused: isPaused, updateNeeded: false },
       () => {
-        // 치지직 탭 새로고침
-        chrome.tabs.query({ url: "*://*.chzzk.naver.com/*" }, (tabs) => {
-          tabs.forEach((tab) => chrome.tabs.reload(tab.id));
-        });
-
+        if (isPaused) {
+          // 0ff - 페이지 새로고침
+          setTimeout(() => {
+            chrome.tabs.query({ url: "*://*.chzzk.naver.com/*" }, (tabs) => {
+              tabs.forEach((tab) => chrome.tabs.reload(tab.id));
+            });
+          }, 150);
+        } else {
+          // on - soft 재주입
+          chrome.runtime.sendMessage({ type: "REQUEST_SOFT_REAPPLY" });
+        }
         // 팝업 UI 재렌더링
         renderPopupUI();
       }

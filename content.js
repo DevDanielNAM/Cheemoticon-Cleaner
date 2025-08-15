@@ -1,5 +1,8 @@
-chrome.runtime.sendMessage({ type: "NEW_VERSION_LOADED" });
-chrome.storage.local.set({ updateNeeded: false });
+// 전역 window 객체에 현재 스크립트의 실행 여부를 기록
+if (window.myEmoticonExtensionInstance) {
+  // 이전 버전의 Observer 등을 정리하는 함수를 호출
+  window.myEmoticonExtensionInstance.cleanup();
+}
 
 // 확장 프로그램 기능 시작 전, 일시정지 상태인지 확인
 chrome.storage.local.get("isPaused", (data) => {
@@ -14,6 +17,12 @@ chrome.storage.local.get("isPaused", (data) => {
     constructor() {
       this.observers = new Map();
       this.init();
+    }
+
+    // Observer 등을 모두 중지시키는 정리(cleanup) 메서드
+    cleanup() {
+      this.observers.forEach((observer) => observer.disconnect());
+      this.observers.clear();
     }
 
     /**
@@ -123,21 +132,26 @@ chrome.storage.local.get("isPaused", (data) => {
      */
     updateDeleteButtonStyles() {
       const isDark = document.documentElement.classList.contains("theme_dark");
-      const iconFile = isDark
-        ? "delete_icon_white.svg"
-        : "delete_icon_dark.svg";
 
+      // 개별 삭제 버튼 스타일링
       document.querySelectorAll(".emoji-delete-btn").forEach((button) => {
         button.classList.toggle("bg-dark", isDark);
         button.classList.toggle("bg-white", !isDark);
       });
 
-      const clearAllIcon = document.querySelector(
-        "#clear-all-emoticons-btn .trash-icon-svg"
-      );
+      const clearAllButton = document.querySelector("#clear-all-emoticons-btn");
 
-      if (clearAllIcon) {
-        clearAllIcon.src = chrome.runtime.getURL(`images/${iconFile}`);
+      const deleteIconDarkSvg = `<svg xmlns="http://www.w3.org/2000/svg" height="18px" viewBox="0 -960 960 960" width="18px" fill="#000000"><path d="M280-120q-33 0-56.5-23.5T200-200v-520h-40v-80h200v-40h240v40h200v80h-40v520q0 33-23.5 56.5T680-120H280Zm400-600H280v520h400v-520ZM360-280h80v-360h-80v360Zm160 0h80v-360h-80v360ZM280-720v520-520Z"/></svg>`;
+      const deleteIconWhiteSvg = `<svg xmlns="http://www.w3.org/2000/svg" height="18px" viewBox="0 -960 960 960" width="18px" fill="#FFFFFF"><path d="M280-120q-33 0-56.5-23.5T200-200v-520h-40v-80h200v-40h240v40h200v80h-40v520q0 33-23.5 56.5T680-120H280Zm400-600H280v520h400v-520ZM360-280h80v-360h-80v360Zm160 0h80v-360h-80v360ZM280-720v520-520Z"/></svg>`;
+
+      const desiredColor = isDark ? "#FFFFFF" : "#000000";
+      const currentSvg = clearAllButton.querySelector("svg");
+
+      // 현재 SVG가 없거나, 있더라도 색상이 현재 테마와 다를 경우에만 innerHTML을 변경
+      if (!currentSvg || currentSvg.getAttribute("fill") !== desiredColor) {
+        clearAllButton.innerHTML = isDark
+          ? deleteIconWhiteSvg
+          : deleteIconDarkSvg;
       }
     }
 
@@ -190,13 +204,7 @@ chrome.storage.local.get("isPaused", (data) => {
     createClearAllButton() {
       const clearAllButton = document.createElement("button");
       clearAllButton.id = "clear-all-emoticons-btn";
-
-      const iconImg = document.createElement("img");
-      iconImg.className = "trash-icon-svg";
-
-      clearAllButton.appendChild(iconImg);
       clearAllButton.addEventListener("click", () => this.clearAllEmoticons());
-
       return clearAllButton;
     }
 
@@ -258,6 +266,9 @@ chrome.storage.local.get("isPaused", (data) => {
 
   // 확장 프로그램 인스턴스 생성 및 실행
   const emoticonExtension = new EmoticonExtension();
+
+  // 전역 변수에 현재 인스턴스를 할당
+  window.myEmoticonExtensionInstance = emoticonExtension;
 
   window.addEventListener("beforeunload", () => {
     const observer = emoticonExtension.observers.get("main");

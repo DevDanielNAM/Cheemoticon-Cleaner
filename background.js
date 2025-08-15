@@ -13,6 +13,70 @@ function reloadChzzkTabs() {
 }
 
 /**
+ * 페이지 리로드 없이 content/style만 재주입(소프트 재적용)
+ */
+async function softReapplyToChzzkTabs() {
+  const targetUrl = "*://*.chzzk.naver.com/*";
+  const tabs = await new Promise((resolve) =>
+    chrome.tabs.query({ url: targetUrl }, resolve)
+  );
+
+  for (const tab of tabs) {
+    try {
+      // 스크립팅 권한이 없을 수 있는 페이지(예: 오류 페이지)를 위해 예외 처리
+      await chrome.scripting
+        .unregisterContentScripts({ ids: [`content-script-${tab.id}`] })
+        .catch(() => {});
+      await chrome.scripting.registerContentScripts([
+        {
+          id: `content-script-${tab.id}`,
+          js: ["content.js"],
+          css: ["style.css"],
+          matches: ["*://*.chzzk.naver.com/*"],
+          runAt: "document_idle",
+        },
+      ]);
+      // 즉시 실행을 위해 executeScript를 사용
+      await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        files: ["content.js"],
+      });
+    } catch (_) {
+      chrome.tabs.reload(tab.id, { bypassCache: true });
+    }
+  }
+}
+
+/**
+ * 메시지 수신 리스너
+ */
+chrome.runtime.onMessage.addListener(async (request, sender, sendResponse) => {
+  if (request.type === "MANUAL_RELOAD_REQUEST") {
+    // 재실행 요청을 받으면, 페이지 새로고침을 먼저 예약하고 확장 프로그램을 재시작
+    reloadChzzkTabs();
+
+    // 짧은 지연 후 확장 프로그램 재실행
+    setTimeout(() => {
+      chrome.storage.local.set({ isManualReload: true }).then(() => {
+        chrome.runtime.reload();
+      });
+    }, 150);
+    return;
+  }
+
+  // '업데이트 적용' 또는 'ON' 시 소프트 재주입을 요청하는 메시지
+  if (request.type === "REQUEST_SOFT_REAPPLY") {
+    softReapplyToChzzkTabs();
+    return true;
+  }
+
+  // 기존 NEW_VERSION_LOADED는 배지 제거 역할만 하도록 분리
+  if (request.type === "CLEAR_UPDATE_BADGE") {
+    chrome.action.setBadgeText({ text: "" });
+  }
+});
+
+/**
  * 1. 설치 또는 업데이트 시 실행
  */
 chrome.runtime.onInstalled.addListener(async (details) => {
@@ -44,7 +108,7 @@ chrome.runtime.onInstalled.addListener(async (details) => {
  * 2. 브라우저 시작 시 실행
  */
 chrome.runtime.onStartup.addListener(() => {
-  reloadChzzkTabs();
+  softReapplyToChzzkTabs();
 });
 
 /**
@@ -63,22 +127,5 @@ chrome.management.onEnabled.addListener(async (extensionInfo) => {
       // 플래그가 없으면 '수동 활성화'로 간주하고 새로고침 실행
       reloadChzzkTabs();
     }
-  }
-});
-
-/**
- * 4. content.js로부터 메시지를 받으면 배지를 제거
- */
-chrome.runtime.onMessage.addListener(async (request, sender, sendResponse) => {
-  if (request.type === "NEW_VERSION_LOADED") {
-    chrome.action.setBadgeText({ text: "" });
-  }
-
-  if (request.type === "MANUAL_RELOAD_REQUEST") {
-    chrome.storage.local.set({ isManualReload: true }).then(() => {
-      // 저장이 완료된 후 새로고침을 실행
-      chrome.runtime.reload();
-    });
-    return true;
   }
 });
