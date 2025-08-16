@@ -16,6 +16,7 @@ chrome.storage.local.get("isPaused", (data) => {
   class EmoticonExtension {
     constructor() {
       this.observers = new Map();
+      this.isResizing = false;
       this.init();
     }
 
@@ -42,6 +43,9 @@ chrome.storage.local.get("isPaused", (data) => {
 
       // 초기 로드 시에도 한 번 실행
       this.applyRecentEmoticonFeatures();
+
+      // 리사이즈 핸들러 초기화
+      this.initializeResizeHandler();
     }
 
     /**
@@ -80,6 +84,23 @@ chrome.storage.local.get("isPaused", (data) => {
       const container = document.getElementById("recent_emoticon");
       if (!container) {
         return;
+      }
+
+      // '리사이즈 중'이 아닐 때만 저장된 높이를 적용하도록 수정
+      if (!this.isResizing) {
+        const popupContainer = container.closest(
+          '#aside-chatting [class*="popup_container"]'
+        );
+        if (popupContainer) {
+          // 저장된 높이를 적용하기 직전에 부드러운 효과를 활성화
+          popupContainer.classList.add("smooth-transition");
+
+          chrome.storage.local.get(["chzzkEmoticonPopupHeight"], (result) => {
+            if (result.chzzkEmoticonPopupHeight) {
+              popupContainer.style.height = `${result.chzzkEmoticonPopupHeight}px`;
+            }
+          });
+        }
       }
 
       // 먼저 UI를 즉시 적용하여 깜빡임을 방지
@@ -355,6 +376,78 @@ chrome.storage.local.get("isPaused", (data) => {
       } catch (error) {
         console.error(`Failed to delete emoticon ${emojiId}:`, error);
       }
+    }
+
+    /**
+     * 팝업 리사이즈 핸들러를 설정하는 함수
+     */
+    initializeResizeHandler() {
+      // mousedown 이벤트는 한번만 등록하기 위해 document에 위임(event delegation)
+      document.body.addEventListener("mousedown", (e) => {
+        // 클릭된 대상이 팝업 헤더가 아니면 무시
+        const handle = e.target.closest(
+          '#aside-chatting [class*="popup_header"]'
+        );
+        if (!handle) return;
+
+        // 리사이즈할 대상인 팝업 컨테이너를 찾음
+        const popupContainer = handle.closest(
+          '#aside-chatting [class*="popup_container"]'
+        );
+        if (!popupContainer) return;
+
+        e.preventDefault();
+
+        // 드래그를 시작하면 부드러운 효과를 즉시 제거하여 지연 현상을 없앰
+        popupContainer.classList.remove("smooth-transition");
+
+        this.isResizing = true;
+
+        // 리사이즈 시작 시점의 마우스 Y좌표와 컨테이너의 높이를 저장
+        const startY = e.pageY;
+        const startHeight = popupContainer.offsetHeight;
+
+        // body에 'resizing' 클래스를 추가하여 텍스트 선택 방지
+        document.body.classList.add("resizing");
+
+        // --- 마우스 이동(mousemove) 이벤트 핸들러 ---
+        const doDrag = (e) => {
+          // 시작 지점으로부터의 마우스 이동 거리 계산
+          const deltaY = startY - e.pageY;
+          // 새로운 높이 계산
+          let newHeight = startHeight + deltaY;
+
+          // 최소/최대 높이 제한
+          if (newHeight < 150) newHeight = 150; // 최소 높이 150px
+          if (newHeight > 700) newHeight = 700; // 최대 높이 700px
+
+          // 컨테이너에 새로운 높이 적용
+          popupContainer.style.height = `${newHeight}px`;
+        };
+
+        // --- 마우스 버튼 놓기(mouseup) 이벤트 핸들러 ---
+        const stopDrag = () => {
+          // body에서 'resizing' 클래스 제거
+          document.body.classList.remove("resizing");
+          // 이벤트 리스너 정리
+          document.removeEventListener("mousemove", doDrag);
+          document.removeEventListener("mouseup", stopDrag);
+
+          // 드래그를 마치면, 다음 활성화 애니메이션을 위해 부드러운 효과를 다시 켤 준비
+          popupContainer.classList.add("smooth-transition");
+
+          this.isResizing = false;
+
+          // 최종 높이를 chrome.storage에 저장
+          const finalHeight = popupContainer.offsetHeight;
+          chrome.storage.local.set({ chzzkEmoticonPopupHeight: finalHeight });
+        };
+
+        // document에 mousemove와 mouseup 이벤트 리스너를 등록하여
+        // 마우스가 헤더 밖으로 나가도 리사이즈가 계속되도록 함
+        document.addEventListener("mousemove", doDrag);
+        document.addEventListener("mouseup", stopDrag);
+      });
     }
   }
 

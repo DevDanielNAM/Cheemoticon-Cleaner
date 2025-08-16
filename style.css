@@ -78,3 +78,18 @@
   letter-spacing: -0.3px;
   line-height: 20px;
 }
+
+#aside-chatting [class*="popup_header"] {
+  cursor: ns-resize;
+  user-select: none; /* 헤더의 텍스트가 드래그되지 않도록 설정 */
+}
+
+/* 리사이즈 동작 중에 body의 텍스트가 선택되지 않도록 클래스 추가 */
+body.resizing,
+body.resizing * {
+  user-select: none !important;
+}
+
+#aside-chatting [class*="popup_container"].smooth-transition {
+  transition: height 0.3s ease-in-out;
+}
