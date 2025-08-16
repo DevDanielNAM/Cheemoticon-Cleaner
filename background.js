@@ -12,6 +12,22 @@ function reloadChzzkTabs() {
   });
 }
 
+async function reloadChzzkTabsAsync() {
+  const targetUrl = "*://*.chzzk.naver.com/*";
+  try {
+    const tabs = await chrome.tabs.query({ url: targetUrl });
+    if (tabs.length > 0) {
+      // 모든 탭에 새로고침 명령을 보내고, 모든 명령이 성공적으로 전달될 때까지 기다림
+      const reloadPromises = tabs.map((tab) =>
+        chrome.tabs.reload(tab.id, { bypassCache: true })
+      );
+      await Promise.all(reloadPromises);
+    }
+  } catch (error) {
+    console.error("Error reload tabs:", error);
+  }
+}
+
 /**
  * 페이지 리로드 없이 content/style만 재주입(소프트 재적용)
  */
@@ -36,6 +52,13 @@ async function softReapplyToChzzkTabs() {
           runAt: "document_idle",
         },
       ]);
+
+      // 지금 열린 탭에 즉시 CSS 주입
+      await chrome.scripting.insertCSS({
+        target: { tabId: tab.id },
+        files: ["style.css"],
+      });
+
       // 즉시 실행을 위해 executeScript를 사용
       await chrome.scripting.executeScript({
         target: { tabId: tab.id },
@@ -50,18 +73,46 @@ async function softReapplyToChzzkTabs() {
 /**
  * 메시지 수신 리스너
  */
-chrome.runtime.onMessage.addListener(async (request, sender, sendResponse) => {
-  if (request.type === "MANUAL_RELOAD_REQUEST") {
-    // 재실행 요청을 받으면, 페이지 새로고침을 먼저 예약하고 확장 프로그램을 재시작
-    reloadChzzkTabs();
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  if (request.type === "GET_EMOJI_PACKS") {
+    const { userStatusIdHash } = request;
+    if (!userStatusIdHash) {
+      sendResponse({ success: false, error: "userStatusIdHash is missing" });
+      return; // 동기 응답
+    }
 
-    // 짧은 지연 후 확장 프로그램 재실행
-    setTimeout(() => {
+    // 비동기 API 호출
+    (async () => {
+      try {
+        const response = await fetch(
+          `https://api.chzzk.naver.com/service/v1/channels/${userStatusIdHash}/emoji-packs`
+        );
+        if (!response.ok) {
+          throw new Error(`API call failed with status: ${response.status}`);
+        }
+        const data = await response.json();
+        sendResponse({ success: true, data: data.content });
+      } catch (error) {
+        sendResponse({ success: false, error: error.message });
+      }
+    })();
+
+    return true; // sendResponse를 비동기적으로 사용하기 위해 true를 반환
+  }
+
+  if (request.type === "MANUAL_RELOAD_REQUEST") {
+    // 비동기 함수로 감싸서 await을 사용
+    (async () => {
+      // 1. 탭 새로고침이 완료될 때까지 기다림
+      await reloadChzzkTabsAsync();
+
+      // 2. 탭 새로고침이 끝난 후, 확장 프로그램을 재실행
       chrome.storage.local.set({ isManualReload: true }).then(() => {
         chrome.runtime.reload();
       });
-    }, 150);
-    return;
+    })();
+
+    return true;
   }
 
   // '업데이트 적용' 또는 'ON' 시 소프트 재주입을 요청하는 메시지
@@ -73,6 +124,7 @@ chrome.runtime.onMessage.addListener(async (request, sender, sendResponse) => {
   // 기존 NEW_VERSION_LOADED는 배지 제거 역할만 하도록 분리
   if (request.type === "CLEAR_UPDATE_BADGE") {
     chrome.action.setBadgeText({ text: "" });
+    return;
   }
 });
 

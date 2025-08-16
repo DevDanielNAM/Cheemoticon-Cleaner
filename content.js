@@ -45,35 +45,129 @@ chrome.storage.local.get("isPaused", (data) => {
     }
 
     /**
-     * 모든 기능 적용을 담당하는 핵심 함수. 여러 번 호출해도 안전
+     * UI 관련 모든 설정을 적용하는 함수. 여러 번 호출해도 안전
+     * @param {HTMLElement} container - #recent_emoticon element
      */
-    applyRecentEmoticonFeatures() {
-      const container = document.getElementById("recent_emoticon");
-      // #recent_emoticon이 없으면 아무 작업도 하지 않고 즉시 종료
-      if (!container) {
-        return;
-      }
-
-      // --- 1. 전체 삭제 버튼 설정 (없을 때만 추가) ---
+    applyUiSettings(container) {
+      // 1. 전체 삭제 버튼과 wrapper 설정
       const titleElement = container.querySelector("strong");
-      if (titleElement && !document.getElementById("clear-all-emoticons-btn")) {
+      if (
+        titleElement &&
+        !titleElement.parentNode.classList.contains("emoticon-subtitle-wrapper")
+      ) {
         const titleWrapper = document.createElement("div");
         titleWrapper.className = "emoticon-subtitle-wrapper";
         titleElement.parentNode.insertBefore(titleWrapper, titleElement);
         titleWrapper.appendChild(titleElement);
-
         const clearAllButton = this.createClearAllButton();
         titleWrapper.appendChild(clearAllButton);
       }
 
-      // --- 2. 개별 삭제 버튼 설정 (없을 때만 추가) ---
+      // 2. 개별 삭제 버튼 설정 (UI 동기화 포함)
       this.setupEmoticonDeleter(container);
 
-      // --- 3. 테마에 따른 스타일 업데이트 ---
+      // 3. 테마에 따른 스타일 업데이트
       this.updateDeleteButtonStyles();
 
-      // --- 4. '이모티콘 없음' 메시지 상태 업데이트 ---
+      // 4. '이모티콘 없음' 메시지 상태 업데이트
       this.updateEmptyMessageStatus();
+    }
+
+    /**
+     * 기능 적용의 시작점
+     */
+    applyRecentEmoticonFeatures() {
+      const container = document.getElementById("recent_emoticon");
+      if (!container) {
+        return;
+      }
+
+      // 먼저 UI를 즉시 적용하여 깜빡임을 방지
+      this.applyUiSettings(container);
+
+      // 그 다음, 백그라운드에서 만료된 이모티콘을 확인하고 UI를 다시 한번 보정
+      this.checkAndCorrectExpiredEmoticons(container);
+    }
+
+    /**
+     * 백그라운드에서 만료된 이모티콘을 확인하고, 변경이 있다면 UI를 다시 한번 전체적으로 적용
+     * @param {HTMLElement} container - #recent_emoticon element
+     */
+    async checkAndCorrectExpiredEmoticons(container) {
+      const hasChanged = await this.removeExpiredEmoticonsFromStorage();
+
+      // localStorage에 변경이 있었던 경우 (만료된 이모티콘이 제거된 경우),
+      // 웹페이지 스크립트에 의해 UI가 깨졌을 가능성을 대비해 UI 설정을 다시 한번 전체 적용
+      if (hasChanged) {
+        this.applyUiSettings(container);
+      }
+    }
+
+    /**
+     * API를 통해 만료된 이모티콘을 확인하고 localStorage에서 제거하는 로직
+     * @returns {Promise<boolean>} 변경이 있었는지 여부를 반환
+     */
+    async removeExpiredEmoticonsFromStorage() {
+      if (!chrome || !chrome.runtime || !chrome.runtime.sendMessage) {
+        return false;
+      }
+
+      const userStatusIdHash = localStorage.getItem("userStatus.idhash");
+      if (!userStatusIdHash) return false;
+
+      const emoticonsKey = `livechat-emoticon#${userStatusIdHash}`;
+      const recentEmoticons = JSON.parse(
+        localStorage.getItem(emoticonsKey) || "[]"
+      );
+      if (recentEmoticons.length === 0) return false;
+
+      try {
+        const response = await chrome.runtime.sendMessage({
+          type: "GET_EMOJI_PACKS",
+          userStatusIdHash,
+        });
+
+        if (!response || !response.success) {
+          if (chrome.runtime.lastError)
+            console.warn(
+              "Communication channel closed:",
+              chrome.runtime.lastError.message
+            );
+          else console.error("Failed to get emoji packs:", response?.error);
+          return false;
+        }
+
+        const availableEmojiIds = new Set();
+        const { emojiPacks, cheatKeyEmojiPacks, subscriptionEmojiPacks } =
+          response.data;
+        [emojiPacks, cheatKeyEmojiPacks, subscriptionEmojiPacks].forEach(
+          (packs) => {
+            if (packs)
+              packs.forEach((pack) => {
+                if (!pack.emojiPackLocked)
+                  pack.emojis.forEach((emoji) =>
+                    availableEmojiIds.add(emoji.emojiId)
+                  );
+              });
+          }
+        );
+
+        const cleanedEmoticons = recentEmoticons.filter((e) =>
+          availableEmojiIds.has(e.emojiId)
+        );
+
+        if (cleanedEmoticons.length !== recentEmoticons.length) {
+          localStorage.setItem(emoticonsKey, JSON.stringify(cleanedEmoticons));
+          return true;
+        }
+      } catch (error) {
+        if (error.message.includes("Extension context invalidated")) {
+          console.warn("Context invalidated as expected.");
+        } else {
+          console.error("Error removing expired emoticons:", error);
+        }
+      }
+      return false;
     }
 
     /**
