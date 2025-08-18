@@ -24,15 +24,26 @@ chrome.storage.local.get("isPaused", (data) => {
     cleanup() {
       this.observers.forEach((observer) => observer.disconnect());
       this.observers.clear();
+      document.removeEventListener("keydown", this.handleEmoticonShortcut);
+      document.removeEventListener("keydown", this.handleEscapeKey);
+      document.removeEventListener("keydown", this.handleInputShortcut);
     }
 
     /**
      * 확장 프로그램 초기화: DOM 변경 시마다 기능 적용을 시도
      */
     init() {
+      // *** this 바인딩 추가 ***
+      // 이벤트 리스너에서 this가 EmoticonExtension 인스턴스를 가리키도록 바인딩
+      this.handleEmoticonShortcut = this.handleEmoticonShortcut.bind(this);
+      this.handleEscapeKey = this.handleEscapeKey.bind(this);
+      this.handleInputShortcut = this.handleInputShortcut.bind(this);
+
       const mainObserver = new MutationObserver(() => {
         // DOM에 어떤 변화든 감지되면, 무조건 기능 적용 함수를 호출
         this.applyRecentEmoticonFeatures();
+        this.applyShortcutTooltip();
+        this.updateInputPlaceholder();
       });
 
       this.observers.set("main", mainObserver);
@@ -46,6 +57,13 @@ chrome.storage.local.get("isPaused", (data) => {
 
       // 리사이즈 핸들러 초기화
       this.initializeResizeHandler();
+
+      this.updateInputPlaceholder();
+
+      // 키보드 단축키 이벤트 리스너를 등록
+      document.addEventListener("keydown", this.handleEmoticonShortcut);
+      document.addEventListener("keydown", this.handleEscapeKey);
+      document.addEventListener("keydown", this.handleInputShortcut);
     }
 
     /**
@@ -81,6 +99,17 @@ chrome.storage.local.get("isPaused", (data) => {
      * 기능 적용의 시작점
      */
     applyRecentEmoticonFeatures() {
+      // *** 컨텍스트 유효성 검사 ***
+      // 스크립트가 유효한 확장 프로그램 컨텍스트에서 실행되는지 확인
+      // '고아' 스크립트인 경우, 오류를 발생시키기 전에 여기서 실행을 중단
+      if (
+        typeof chrome === "undefined" ||
+        !chrome.runtime ||
+        !chrome.runtime.id
+      ) {
+        return;
+      }
+
       const container = document.getElementById("recent_emoticon");
       if (!container) {
         return;
@@ -438,6 +467,15 @@ chrome.storage.local.get("isPaused", (data) => {
 
           this.isResizing = false;
 
+          // *** 컨텍스트 유효성 검사 ***
+          if (
+            typeof chrome === "undefined" ||
+            !chrome.runtime ||
+            !chrome.runtime.id
+          ) {
+            return;
+          }
+
           // 최종 높이를 chrome.storage에 저장
           const finalHeight = popupContainer.offsetHeight;
           chrome.storage.local.set({ chzzkEmoticonPopupHeight: finalHeight });
@@ -448,6 +486,203 @@ chrome.storage.local.get("isPaused", (data) => {
         document.addEventListener("mousemove", doDrag);
         document.addEventListener("mouseup", stopDrag);
       });
+    }
+
+    /**
+     * 'e' 키 단축키를 처리하는 함수
+     * @param {KeyboardEvent} event - 키보드 이벤트 객체
+     */
+    handleEmoticonShortcut(event) {
+      // *** 컨텍스트 유효성 검사 ***
+      if (
+        typeof chrome === "undefined" ||
+        !chrome.runtime ||
+        !chrome.runtime.id
+      ) {
+        return;
+      }
+
+      // 1. 누른 키가 'e'가 아니면 무시
+      if (event.code !== "KeyE") {
+        return;
+      }
+
+      // 2. 사용자가 텍스트 입력 필드에 입력 중인 경우 무시
+      const target = event.target;
+      const isTyping =
+        target.tagName === "INPUT" ||
+        target.tagName === "TEXTAREA" ||
+        target.tagName === "PRE";
+      target.isContentEditable;
+      if (isTyping) {
+        return;
+      }
+
+      // 3. 이모티콘 버튼을 찾음
+      const emoticonButton = document.querySelector(
+        '#aside-chatting [class*="button_container"][aria-haspopup="true"]'
+      );
+
+      // 4. 버튼이 존재하면 클릭 이벤트를 실행
+      if (emoticonButton) {
+        // 기본 동작('e'키 입력)을 막고, 버튼을 클릭
+        event.preventDefault();
+        emoticonButton.click();
+      }
+    }
+
+    /**
+     * 이모티콘 버튼에 커스텀 단축키 툴팁을 추가하는 함수
+     */
+    applyShortcutTooltip() {
+      // *** 컨텍스트 유효성 검사 ***
+      if (
+        typeof chrome === "undefined" ||
+        !chrome.runtime ||
+        !chrome.runtime.id
+      ) {
+        return;
+      }
+
+      const emoticonButton = document.querySelector(
+        '#aside-chatting [class*="button_container"][aria-haspopup="true"]'
+      );
+      if (!emoticonButton) {
+        return;
+      }
+
+      // 1. 이미 툴팁이 내부에 추가되었는지 확인하여 중복 실행을 방지
+      if (emoticonButton.querySelector(".tooltip-text")) {
+        return;
+      }
+
+      // 2. 툴팁 텍스트를 담을 span 생성
+      const tooltipText = document.createElement("span");
+      tooltipText.className = "tooltip-text";
+      tooltipText.textContent = "(E)";
+
+      // 3. 툴팁 wrapper 역할을 할 클래스를 버튼 자체에 부여
+      emoticonButton.classList.add("cheemoticon-tooltip");
+
+      // 4. 툴팁 텍스트를 버튼의 자식으로 추가
+      emoticonButton.appendChild(tooltipText);
+    }
+
+    /**
+     * 'esc' 키를 처리하여 contenteditable을 textarea로 되돌리는 함수
+     * @param {KeyboardEvent} event - 키보드 이벤트 객체
+     */
+    handleEscapeKey(event) {
+      // *** 컨텍스트 유효성 검사 ***
+      if (
+        typeof chrome === "undefined" ||
+        !chrome.runtime ||
+        !chrome.runtime.id
+      ) {
+        return;
+      }
+
+      // 1. 누른 키가 'Escape'가 아니면 무시
+      if (event.key !== "Escape") {
+        return;
+      }
+
+      // 2. 현재 포커스된 요소(이벤트 타겟)를 찾음
+      const target = event.target;
+
+      // 3. 타겟이 contenteditable 속성을 가진 <pre> 태그인지, 그리고 비어있는지 확인
+      const isEditablePre =
+        target.tagName === "PRE" && target.isContentEditable;
+      const isEmpty = target.textContent.trim() === "";
+
+      if (isEditablePre && isEmpty) {
+        event.preventDefault();
+        document.activeElement.blur();
+
+        const emoticonButton = document.querySelector(
+          '#aside-chatting [class*="button_container"][aria-haspopup="true"]'
+        );
+
+        if (
+          emoticonButton &&
+          emoticonButton.getAttribute("aria-expanded") === "true"
+        ) {
+          emoticonButton.click();
+        }
+      }
+    }
+
+    /**
+     * 채팅 입력창의 placeholder를 감시하고 업데이트하는 함수
+     */
+    updateInputPlaceholder() {
+      // 현재 페이지가 팝업 채팅창이 아니면 아무 작업도 하지 않고 종료
+      if (!window.location.pathname.endsWith("/chat")) {
+        return;
+      }
+      // 컨텍스트 유효성 검사
+      if (
+        typeof chrome === "undefined" ||
+        !chrome.runtime ||
+        !chrome.runtime.id
+      ) {
+        return;
+      }
+
+      const textarea = document.querySelector(
+        '#aside-chatting textarea[class*="live_chatting_input_input"]'
+      );
+
+      if (!textarea || textarea.placeholder.includes("(J)")) {
+        return;
+      }
+
+      textarea.placeholder += " (J)";
+    }
+
+    /**
+     * 'j' 키 단축키를 처리하는 함수
+     * @param {KeyboardEvent} event - 키보드 이벤트 객체
+     */
+    handleInputShortcut(event) {
+      // 현재 페이지가 팝업 채팅창이 아니면 아무 작업도 하지 않고 종료
+      if (!window.location.pathname.endsWith("/chat")) {
+        return;
+      }
+
+      // *** 컨텍스트 유효성 검사 ***
+      if (
+        typeof chrome === "undefined" ||
+        !chrome.runtime ||
+        !chrome.runtime.id
+      ) {
+        return;
+      }
+
+      if (event.code !== "KeyJ") {
+        return;
+      }
+
+      const target = event.target;
+      const isTyping =
+        target.tagName === "INPUT" ||
+        target.tagName === "TEXTAREA" ||
+        target.tagName === "PRE";
+      target.isContentEditable;
+      if (isTyping) {
+        return;
+      }
+
+      const textarea = document.querySelector(
+        '#aside-chatting textarea[class*="live_chatting_input_input"]'
+      );
+
+      if (!textarea) {
+        return;
+      }
+
+      event.preventDefault();
+      textarea.focus();
     }
   }
 

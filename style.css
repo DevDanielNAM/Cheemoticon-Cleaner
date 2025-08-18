@@ -93,3 +93,40 @@ body.resizing * {
 #aside-chatting [class*="popup_container"].smooth-transition {
   transition: height 0.3s ease-in-out;
 }
+
+/* 툴팁을 감쌀 컨테이너 스타일 */
+#aside-chatting [class*="button_container"][aria-haspopup="true"] {
+  position: relative !important;
+}
+
+/* 툴팁 텍스트 박스 스타일 */
+.cheemoticon-tooltip .tooltip-text {
+  visibility: hidden; /* 평소에는 숨김 */
+  width: 40px;
+  background-color: var(--Surface-Neutral-Base);
+  color: var(--Content-Neutral-Cool-Stronger);
+  text-align: center;
+  padding: 5px 0;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 400;
+
+  /* 위치 설정 */
+  position: absolute;
+  z-index: 9999; /* 다른 요소 위에 보이도록 z-index 설정 */
+  bottom: 125%; /* 버튼 위쪽에 위치 */
+  left: 50%;
+  margin-left: -20px; /* 너비의 절반만큼 왼쪽으로 이동 */
+
+  /* 부드럽게 나타나는 효과 */
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+/* 컨테이너에 마우스를 올렸을 때 툴팁 텍스트를 보이게 함 */
+#aside-chatting
+  [class*="button_container"][aria-haspopup="true"]:hover
+  .tooltip-text {
+  visibility: visible;
+  opacity: 1;
+}
