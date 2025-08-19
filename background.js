@@ -2,7 +2,7 @@
  * 치지직 탭을 새로고침하는 함수
  */
 function reloadChzzkTabs() {
-  const targetUrl = "*://*.chzzk.naver.com/*";
+  const targetUrl = "https://chzzk.naver.com/*";
   chrome.tabs.query({ url: targetUrl }, (tabs) => {
     if (tabs.length > 0) {
       tabs.forEach((tab) => {
@@ -13,7 +13,7 @@ function reloadChzzkTabs() {
 }
 
 async function reloadChzzkTabsAsync() {
-  const targetUrl = "*://*.chzzk.naver.com/*";
+  const targetUrl = "https://chzzk.naver.com/*";
   try {
     const tabs = await chrome.tabs.query({ url: targetUrl });
     if (tabs.length > 0) {
@@ -32,7 +32,7 @@ async function reloadChzzkTabsAsync() {
  * 페이지 리로드 없이 content/style만 재주입(소프트 재적용)
  */
 async function softReapplyToChzzkTabs() {
-  const targetUrl = "*://*.chzzk.naver.com/*";
+  const targetUrl = "https://chzzk.naver.com/*";
   const tabs = await new Promise((resolve) =>
     chrome.tabs.query({ url: targetUrl }, resolve)
   );
@@ -48,7 +48,7 @@ async function softReapplyToChzzkTabs() {
           id: `content-script-${tab.id}`,
           js: ["content.js"],
           css: ["style.css"],
-          matches: ["*://*.chzzk.naver.com/*"],
+          matches: ["https://chzzk.naver.com/*"],
           runAt: "document_idle",
         },
       ]);

@@ -14,12 +14,15 @@
   },
   "content_scripts": [
     {
-      "matches": ["*://*.chzzk.naver.com/*"],
+      "matches": ["https://chzzk.naver.com/*"],
       "js": ["content.js"],
       "css": ["style.css"]
     }
   ],
-  "host_permissions": ["*://*.chzzk.naver.com/*"],
+  "host_permissions": [
+    "https://chzzk.naver.com/*",
+    "https://api.chzzk.naver.com/*"
+  ],
   "action": {
     "default_title": "치모티콘 정리",
     "default_popup": "popup/popup.html"
