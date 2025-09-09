@@ -17,6 +17,7 @@ chrome.storage.local.get("isPaused", (data) => {
     constructor() {
       this.observers = new Map();
       this.isResizing = false;
+      this.currentMax = null;
       this.init();
     }
 
@@ -38,6 +39,7 @@ chrome.storage.local.get("isPaused", (data) => {
       this.handleEmoticonShortcut = this.handleEmoticonShortcut.bind(this);
       this.handleEscapeKey = this.handleEscapeKey.bind(this);
       this.handleInputShortcut = this.handleInputShortcut.bind(this);
+      this.injectAndCommunicate();
 
       const mainObserver = new MutationObserver(() => {
         // DOM에 어떤 변화든 감지되면, 무조건 기능 적용 함수를 호출
@@ -67,14 +69,161 @@ chrome.storage.local.get("isPaused", (data) => {
     }
 
     /**
+     * inject.js를 웹 페이지에 주입하고, 저장된 최대 개수 설정을 전달하는 함수
+     */
+    async injectAndCommunicate() {
+      await this.injectScript("inject.js");
+
+      // storage에서 설정 값을 가져와 inject.js로 전송
+      const { chzzkRecentMax = 20 } = await chrome.storage.local.get(
+        "chzzkRecentMax"
+      );
+      this.postMaxCountToPage(chzzkRecentMax);
+      this.currentMax = chzzkRecentMax;
+      // storage 값이 변경될 때마다 inject.js에 다시 알려주기 위한 리스너
+      chrome.storage.onChanged.addListener((changes, namespace) => {
+        if (namespace === "local" && changes.chzzkRecentMax) {
+          const newMax = changes.chzzkRecentMax.newValue;
+
+          // 1. inject.js와 통신
+          this.postMaxCountToPage(changes.chzzkRecentMax.newValue);
+
+          // 2. 현재 클래스 인스턴스의 최대값 상태를 업데이트
+          this.currentMax = newMax;
+
+          // 3. UI를 다시 렌더링하여 제목을 실시간으로 변경
+          const container = document.getElementById("recent_emoticon");
+          if (container) {
+            this.applyUiSettings(container);
+          }
+        }
+      });
+    }
+
+    /**
+     * 지정된 스크립트 파일을 페이지의 DOM에 삽입하는 유틸리티 함수
+     * @param {string} filePath - 확장 프로그램 루트 기준 파일 경로
+     */
+    injectScript(filePath) {
+      return new Promise((resolve) => {
+        // window 객체에 우리만의 플래그를 확인하여, 이미 주입되었다면 다시 실행하지 않음
+        if (window.cheemoticonInjected) {
+          resolve();
+          return;
+        }
+
+        const s = document.createElement("script");
+        s.src = chrome.runtime.getURL(filePath);
+        // 스크립트 로드가 끝나면 DOM에서 제거하여 흔적을 남기지 않음
+        s.onload = () => {
+          s.remove();
+          // 주입에 성공했으면, 다음을 위해 플래그를 남김
+          window.cheemoticonInjected = true;
+          resolve();
+        };
+        (document.head || document.documentElement).appendChild(s);
+      });
+    }
+    /**
+     * content script에서 페이지의 window 객체로 메시지를 보내는 함수 (inject.js와 통신용)
+     * @param {number} maxCount - 전달할 최대 이모티콘 개수
+     */
+    postMaxCountToPage(maxCount) {
+      window.postMessage(
+        {
+          type: "CHZZK_EMOTICON_MAX_COUNT_UPDATE",
+          maxCount: maxCount,
+        },
+        "*"
+      );
+    }
+
+    /**
+     * 저장된 순서에 따라 이모티콘 카테고리 순서를 재정렬하는 함수
+     */
+    async reorderEmoticonCategories() {
+      // 1. 이모티콘들을 담고 있는 부모 컨테이너를 찾음
+      const container = document.querySelector(".flicking-camera");
+      if (!container) {
+        console.error(
+          "[치모티콘 정리] Can't find '.flicking-camera' container."
+        );
+        return;
+      }
+
+      // 이미 순서 변경이 완료되었다는 깃발(data-reordered)이 있으면,
+      // 함수를 즉시 종료하여 무한 루프를 방지
+      if (container.dataset.reordered === "true") {
+        return;
+      }
+
+      // 순서를 변경할 대상 아이템(id를 가진 버튼)들이 실제로 DOM에 존재하는지 확인
+      const itemsToReorder = container.querySelectorAll(
+        "[class*='emoticon_flicking_item__'] button[id]"
+      );
+      if (itemsToReorder.length === 0) {
+        // 아직 이모티콘 팩 아이템들이 렌더링되지 않았으므로,
+        // '완료' 깃발을 세우지 않고 함수를 종료하여 다음 실행 기회를 기다림
+        return;
+      }
+
+      // 2. 저장된 이모티콘 순서 데이터를 가져옴
+      const data = await chrome.storage.local.get("emoticonOrder");
+      const desiredIdOrder = data.emoticonOrder;
+
+      // 저장된 순서가 없으면 함수를 종료
+      if (!desiredIdOrder || !Array.isArray(desiredIdOrder)) {
+        return;
+      }
+
+      // 3. 현재 페이지에 있는 모든 이모티콘 아이템들을 효율적으로 찾기 위해 Map으로 만듦
+      // Key: 버튼 ID, Value: 상위 div 요소 (emoticon_flicking_item__YElNj)
+      const itemMap = new Map();
+      container
+        .querySelectorAll("[class*='emoticon_flicking_item__']")
+        .forEach((itemDiv) => {
+          const button = itemDiv.querySelector("button[id]");
+          if (button) {
+            itemMap.set(button.id, itemDiv);
+          }
+        });
+
+      // 4. 저장된 ID 순서(desiredIdOrder)에 따라 이모티콘 아이템을 컨테이너에 다시 append
+      // appendChild는 기존에 있던 요소를 맨 뒤로 '이동'
+      desiredIdOrder
+        .filter((buttonId) => itemMap.has(buttonId))
+        .forEach((buttonId) => {
+          const itemToMove = itemMap.get(buttonId);
+          if (itemToMove) {
+            // 부모 컨테이너에 다시 추가하여 순서를 변경 (맨 뒤로 이동)
+            container.appendChild(itemToMove);
+          }
+        });
+
+      // 모든 작업이 끝난 후, 컨테이너에 깃발을 세워 다음 호출 시에는
+      // 작업이 실행되지 않도록 함
+      container.dataset.reordered = "true";
+    }
+
+    /**
      * UI 관련 모든 설정을 적용하는 함수. 여러 번 호출해도 안전
      * @param {HTMLElement} container - #recent_emoticon element
      */
     applyUiSettings(container) {
       // 1. 전체 삭제 버튼과 wrapper 설정
       const titleElement = container.querySelector("strong");
+      if (!titleElement) {
+        return; // titleElement가 없으면 함수 종료
+      }
+
+      // 현재 이모티콘 개수와 최대 개수 가져오기
+      const emoticonList = container.querySelector("ul");
+      const currentCount = emoticonList
+        ? emoticonList.querySelectorAll("li").length
+        : 0;
+
+      // (최초 1회 실행) wrapper가 없으면 생성하고 버튼을 추가
       if (
-        titleElement &&
         !titleElement.parentNode.classList.contains("emoticon-subtitle-wrapper")
       ) {
         const titleWrapper = document.createElement("div");
@@ -84,6 +233,19 @@ chrome.storage.local.get("isPaused", (data) => {
         const clearAllButton = this.createClearAllButton();
         titleWrapper.appendChild(clearAllButton);
       }
+
+      // (매번 실행) 제목 텍스트에 최신 개수를 업데이트
+      const newTitleText = `최근 사용한 이모티콘 (${currentCount}/${
+        this.currentMax !== null ? this.currentMax : "..."
+      }개)`;
+
+      // 현재 DOM의 내용과 새로 설정할 내용이 다를 때만 업데이트하여
+      // 불필요한 DOM 수정을 막고, 무한 루프를 차단
+      if (titleElement.textContent !== newTitleText) {
+        titleElement.textContent = newTitleText;
+      }
+
+      this.reorderEmoticonCategories();
 
       // 2. 개별 삭제 버튼 설정 (UI 동기화 포함)
       this.setupEmoticonDeleter(container);
@@ -595,13 +757,15 @@ chrome.storage.local.get("isPaused", (data) => {
         target.tagName === "PRE" && target.isContentEditable;
       const isEmpty = target.textContent.trim() === "";
 
-      if (isEditablePre && isEmpty) {
-        event.preventDefault();
-        document.activeElement.blur();
+      const emoticonButton = document.querySelector(
+        '#aside-chatting [class*="button_container"][aria-haspopup="true"]'
+      );
 
-        const emoticonButton = document.querySelector(
-          '#aside-chatting [class*="button_container"][aria-haspopup="true"]'
-        );
+      // case 1: 비어있는 채팅 입력창에서 ESC를 누른 경우
+      if (isEditablePre && isEmpty) {
+        event.preventDefault(); // 기본 동작을 막음
+        event.stopPropagation(); // 이벤트 전파를 막아 다른 리스너의 동작을 원천 차단
+        document.activeElement.blur();
 
         if (
           emoticonButton &&
@@ -609,6 +773,17 @@ chrome.storage.local.get("isPaused", (data) => {
         ) {
           emoticonButton.click();
         }
+        return;
+      }
+
+      // case 2: 이모티콘 창만 열려있는 경우
+      if (
+        emoticonButton &&
+        emoticonButton.getAttribute("aria-expanded") === "true"
+      ) {
+        event.preventDefault();
+        event.stopPropagation();
+        emoticonButton.click();
       }
     }
 
@@ -696,6 +871,14 @@ chrome.storage.local.get("isPaused", (data) => {
     const observer = emoticonExtension.observers.get("main");
     if (observer) {
       observer.disconnect();
+    }
+  });
+
+  chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+    if (request.type === "GET_USER_HASH") {
+      const userHash = localStorage.getItem("userStatus.idhash");
+      sendResponse({ userStatusIdHash: userHash });
+      return true; // 비동기 응답을 위해 true 반환
     }
   });
 });

@@ -25,39 +25,51 @@
     </div>
 
     <div id="control-wrapper">
-      <button id="reload-btn" title="">
-        <svg
-          id="reload-icon"
-          xmlns="http://www.w3.org/2000/svg"
-          height="24px"
-          viewBox="0 -960 960 960"
-          width="24px"
-          fill="#000000"
-        >
-          <path
-            d="M440-122q-121-15-200.5-105.5T160-440q0-66 26-126.5T260-672l57 57q-38 34-57.5 79T240-440q0 88 56 155.5T440-202v80Zm80 0v-80q87-16 143.5-83T720-440q0-100-70-170t-170-70h-3l44 44-56 56-140-140 140-140 56 56-44 44h3q134 0 227 93t93 227q0 121-79.5 211.5T520-122Z"
-          />
-        </svg>
-        <svg
-          id="update-icon"
-          style="display: none"
-          xmlns="http://www.w3.org/2000/svg"
-          height="24px"
-          viewBox="0 -960 960 960"
-          width="24px"
-          fill="#8B1A10"
-        >
-          <path
-            d="M240-120v-80l40-40H160q-33 0-56.5-23.5T80-320v-440q0-33 23.5-56.5T160-840h320v80H160v440h640v-120h80v120q0 33-23.5 56.5T800-240H680l40 40v80H240Zm360-240L400-560l56-56 104 103v-327h80v327l104-103 56 56-200 200Z"
-          />
-        </svg>
-      </button>
-
-      <div class="toggle-wrapper">
-        <label class="switch" title="'치모티콘 정리' ON/OFF">
-          <input type="checkbox" id="pause-toggle" />
-          <span class="slider"></span>
+      <div id="max-wrapper">
+        <label
+          >최근 이모티콘 최대 개수<br />(15~60개)<br />
+          <div>
+            <input id="max-count" type="number" min="15" max="60" step="5" />
+            <button id="max-count-confirm-btn">확인</button>
+          </div>
         </label>
+      </div>
+
+      <div id="btn-and-toggle-wrapper">
+        <button id="reload-btn" title="">
+          <svg
+            id="reload-icon"
+            xmlns="http://www.w3.org/2000/svg"
+            height="24px"
+            viewBox="0 -960 960 960"
+            width="24px"
+            fill="#000000"
+          >
+            <path
+              d="M440-122q-121-15-200.5-105.5T160-440q0-66 26-126.5T260-672l57 57q-38 34-57.5 79T240-440q0 88 56 155.5T440-202v80Zm80 0v-80q87-16 143.5-83T720-440q0-100-70-170t-170-70h-3l44 44-56 56-140-140 140-140 56 56-44 44h3q134 0 227 93t93 227q0 121-79.5 211.5T520-122Z"
+            />
+          </svg>
+          <svg
+            id="update-icon"
+            style="display: none"
+            xmlns="http://www.w3.org/2000/svg"
+            height="24px"
+            viewBox="0 -960 960 960"
+            width="24px"
+            fill="#8B1A10"
+          >
+            <path
+              d="M240-120v-80l40-40H160q-33 0-56.5-23.5T80-320v-440q0-33 23.5-56.5T160-840h320v80H160v440h640v-120h80v120q0 33-23.5 56.5T800-240H680l40 40v80H240Zm360-240L400-560l56-56 104 103v-327h80v327l104-103 56 56-200 200Z"
+            />
+          </svg>
+        </button>
+
+        <div class="toggle-wrapper">
+          <label class="switch" title="'치모티콘 정리' ON/OFF">
+            <input type="checkbox" id="pause-toggle" />
+            <span class="slider"></span>
+          </label>
+        </div>
       </div>
     </div>
 
@@ -73,6 +85,38 @@
 
     <div id="update-notice">
       새로운 버전이 적용되려면<br />치지직 새로고침이 필요해요!
+    </div>
+
+    <div id="emoticon-list-wrapper">
+      <div id="emoticon-list-title">
+        <span>
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            height="20px"
+            viewBox="0 -960 960 960"
+            width="20px"
+            fill="#000000"
+          >
+            <path d="M400-280v-400l200 200-200 200Z" />
+          </svg>
+          이모티콘 순서 편집</span
+        >
+        <button id="refresh-btn" title="이모티콘 순서 초기화">
+          <svg
+            id="refresh-icon"
+            xmlns="http://www.w3.org/2000/svg"
+            height="24px"
+            viewBox="0 -960 960 960"
+            width="24px"
+            fill="#000000"
+          >
+            <path
+              d="M480-160q-134 0-227-93t-93-227q0-134 93-227t227-93q69 0 132 28.5T720-690v-110h80v280H520v-80h168q-32-56-87.5-88T480-720q-100 0-170 70t-70 170q0 100 70 170t170 70q77 0 139-44t87-116h84q-28 106-114 173t-196 67Z"
+            />
+          </svg>
+        </button>
+      </div>
+      <div id="emoticon-list-container" class="hidden"></div>
     </div>
     <script src="popup.js"></script>
   </body>

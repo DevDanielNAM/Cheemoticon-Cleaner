@@ -7,16 +7,23 @@
 .emoji-delete-btn {
   display: none;
   position: absolute;
-  top: -2px;
-  right: -2px;
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
+  top: -7px;
+  right: -3px;
+  width: 15px;
+  height: 15px;
+  line-height: 13px;
+  border-radius: 5px;
   font-size: 12px;
-  line-height: 14px;
   text-align: center;
   cursor: pointer;
   z-index: 10;
+  transition: all 0.3s ease-in-out;
+}
+
+.emoji-delete-btn:hover {
+  background-color: rgba(248, 55, 55, 0.828);
+  color: white;
+  border-radius: 50%;
 }
 
 .bg-dark {

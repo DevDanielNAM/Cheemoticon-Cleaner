@@ -11,6 +11,16 @@ body {
   text-align: center;
 }
 
+/* 드래그하는 동안 body 전체에 적용될 커서 스타일 */
+body.grabbing {
+  cursor: grabbing;
+}
+
+/* 드래그 대상 아이템 자체의 커서도 변경 */
+body.grabbing .emoticon-item {
+  cursor: grabbing;
+}
+
 #modal-wrapper {
   display: none;
   position: relative;
@@ -28,7 +38,7 @@ body {
   display: flex;
   align-items: center;
   flex-direction: column;
-  justify-content: space-evenly;
+  justify-content: center;
 }
 
 #modal-content-text {
@@ -62,7 +72,7 @@ body {
   border: none;
   border-radius: 8px;
   padding: 8px 16px;
-  background-color: #e3858524;
+  background-color: #e3858545;
   color: white;
   font-size: 15px;
   font-weight: bold;
@@ -77,7 +87,7 @@ body {
   border: none;
   border-radius: 8px;
   padding: 8px 16px;
-  background-color: #85e3be24;
+  background-color: #85e3be45;
   color: white;
   font-size: 15px;
   font-weight: bold;
@@ -182,6 +192,146 @@ body {
   margin: auto;
 }
 
+#max-wrapper > label {
+  width: fit-content;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+#max-count {
+  width: 40px;
+  margin-top: 7px;
+  margin-left: 4px;
+  margin-right: 5px;
+  text-align: center;
+  border-radius: 5px;
+  border: none;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255), 0 0 0 4px rgb(197, 197, 197),
+    0 0 0 6px rgba(197, 197, 197, 0.06);
+  transition: box-shadow 0.2s ease-in-out;
+}
+
+#max-count:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255), 0 0 0 4px rgb(38, 150, 255),
+    0 0 0 6px rgba(38, 150, 255, 0.06);
+}
+
+#max-count.input-invalid {
+  box-shadow: 0 0 0 2px rgba(255, 255, 255), 0 0 0 4px rgb(255, 0, 0),
+    0 0 0 6px rgba(255, 0, 0, 0.06);
+}
+
+#max-count-confirm-btn {
+  width: fit-content;
+  padding: 5px;
+  border-radius: 5px;
+  background-color: #ffffffb5;
+  backdrop-filter: blur(2px);
+  box-shadow: 0px 0px 5px 3px #beeefaa6;
+  font-size: 12px;
+  user-select: none;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: all 0.3s ease-in-out;
+}
+
+#max-count-confirm-btn:hover {
+  background-color: #ffffff;
+  border: 1px solid #00800057;
+  box-shadow: 0px 0px 5px 3px #71ffaea6;
+}
+
+#btn-and-toggle-wrapper {
+  display: flex;
+}
+
+#emoticon-list-title {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+#emoticon-list-title span {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  font-weight: bold;
+  user-select: none;
+}
+
+#emoticon-list-title span svg {
+  transition: transform 0.2s ease-in-out;
+}
+
+.edit-unavailable-message {
+  margin: auto;
+}
+
+#emoticon-list-container {
+  display: flex;
+  overflow-y: scroll;
+  max-height: 325px;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 4px 15px 0px;
+  gap: 4px;
+  transition: max-height 0.3s ease-in-out allow-discrete;
+}
+
+@starting-style {
+  #emoticon-list-container {
+    max-height: 0;
+  }
+}
+
+.emoticon-item {
+  display: flex;
+  align-items: center;
+  cursor: grab;
+}
+
+.emoticon-item img {
+  width: 15px;
+  height: 15px;
+  object-fit: contain;
+  border-radius: 5px;
+  margin: auto 3px;
+}
+
+.hidden {
+  display: none !important;
+}
+
+#refresh-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+  margin-right: 10px;
+  position: absolute;
+  right: 6%;
+  display: flex;
+  align-items: center;
+  border-radius: 50%;
+  transition: background-color 0.2s;
+}
+
+#refresh-btn:hover {
+  background-color: #f0f0f0;
+}
+
+#refresh-btn #refresh-icon {
+  width: 18px;
+  height: 18px;
+  transition: transform 0.7s ease-in-out;
+}
+
+#refresh-btn:hover #refresh-icon {
+  transform: rotate(360deg);
+}
+
 .translate-x-off {
   transform: translateX(-242px);
 }
@@ -217,9 +367,9 @@ body {
 /* 제어 버튼 전체 컨테이너 */
 #control-wrapper {
   display: flex;
-  justify-content: flex-end;
+  justify-content: space-between;
   align-items: center;
-  padding: 10px 12px 4px;
+  padding: 7px 12px 4px;
   border-top: 1px solid #e0e0e0;
   margin: 12px auto;
 }
