@@ -1,13 +1,18 @@
 @font-face {
-  font-family: "Gowun Dodum";
-  src: url("../fonts/GowunDodum-Regular.ttf") format("truetype");
-  font-weight: normal;
+  font-family: "Pretendard Variable";
+  font-weight: 45 920;
   font-style: normal;
+  font-display: swap;
+  src: url("../fonts/PretendardVariable.woff2") format("woff2-variations");
+}
+
+* {
+  box-sizing: border-box;
+  font-family: "Pretendard Variable";
 }
 
 body {
-  width: 250px;
-  font-family: "Gowun Dodum";
+  width: 450px;
   text-align: center;
 }
 
@@ -23,7 +28,12 @@ body.grabbing .emoticon-item {
 
 #modal-wrapper {
   display: none;
-  position: relative;
+  position: absolute;
+  z-index: 9999;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: saturate(1.2) blur(2px);
+  justify-content: center;
 }
 
 #modal-contents {
@@ -32,9 +42,7 @@ body.grabbing .emoticon-item {
   border-radius: 12px;
   box-shadow: 0px 0px 14px 3px #beeefaa6;
   position: absolute;
-  top: 2px;
-  left: 9px;
-  z-index: 100;
+  top: 15%;
   display: flex;
   align-items: center;
   flex-direction: column;
@@ -47,11 +55,8 @@ body.grabbing .emoticon-item {
   font-size: 16px;
   padding: 5px;
   border-radius: 12px;
-  box-shadow: 0px 0px 14px 7px #f0f0f0a6;
   font-weight: bold;
-  color: #0f4807;
-  backdrop-filter: blur(1px);
-  background-color: #ffffff90;
+  color: #ffffffc9;
   word-break: auto-phrase;
 }
 
@@ -60,10 +65,8 @@ body.grabbing .emoticon-item {
   display: flex;
   justify-content: space-around;
   margin-bottom: 10px;
-  background-color: #ffffff24;
   backdrop-filter: blur(1px);
   padding: 5px 10px;
-  box-shadow: 0px 0px 14px 7px #f0f0f0a6;
   border-radius: 12px;
 }
 
@@ -72,7 +75,7 @@ body.grabbing .emoticon-item {
   border: none;
   border-radius: 8px;
   padding: 8px 16px;
-  background-color: #e3858545;
+  background-color: #e3858585;
   color: white;
   font-size: 15px;
   font-weight: bold;
@@ -87,7 +90,7 @@ body.grabbing .emoticon-item {
   border: none;
   border-radius: 8px;
   padding: 8px 16px;
-  background-color: #85e3be45;
+  background-color: #85e3be85;
   color: white;
   font-size: 15px;
   font-weight: bold;
@@ -147,16 +150,16 @@ body.grabbing .emoticon-item {
 #description-wrapper {
   display: flex;
   width: 100%;
-  height: 80px;
+  height: 60px;
   overflow: hidden;
   position: relative;
 }
 
 #description-on {
+  width: 95%;
   position: absolute;
   top: 0;
   left: 12px;
-  margin-bottom: 20px;
   line-height: 25px;
   font-size: 14px;
   font-weight: bold;
@@ -169,16 +172,16 @@ body.grabbing .emoticon-item {
 }
 
 .translate-x-on {
-  transform: translateX(-250px);
+  transform: translateX(-460px);
 }
 
 #description-off {
   display: flex;
-  width: 225px;
-  height: 70px;
+  width: 95%;
+  height: 45px;
   position: absolute;
   top: 0;
-  left: 255px;
+  left: 455px;
   border-radius: 7px;
   background-image: linear-gradient(150deg, #ef2f2f9c, #c62b8466);
   font-size: 14px;
@@ -190,6 +193,12 @@ body.grabbing .emoticon-item {
 
 #description-off > p {
   margin: auto;
+}
+
+#max-wrapper {
+  border: 1px solid #c2c2c2;
+  padding: 5px;
+  border-radius: 8px;
 }
 
 #max-wrapper > label {
@@ -230,7 +239,7 @@ body.grabbing .emoticon-item {
   background-color: #ffffffb5;
   backdrop-filter: blur(2px);
   box-shadow: 0px 0px 5px 3px #beeefaa6;
-  font-size: 12px;
+  font-size: 11px;
   user-select: none;
   cursor: pointer;
   border: 1px solid transparent;
@@ -245,6 +254,16 @@ body.grabbing .emoticon-item {
 
 #btn-and-toggle-wrapper {
   display: flex;
+}
+
+#emoticon-list-wrapper {
+  display: flex;
+  justify-content: space-around;
+}
+
+#emoticon-order-list-wrapper {
+  width: 45%;
+  margin-bottom: 5px;
 }
 
 #emoticon-list-title {
@@ -272,18 +291,47 @@ body.grabbing .emoticon-item {
 #emoticon-list-container {
   display: flex;
   overflow-y: scroll;
-  max-height: 325px;
+  max-height: 310px;
   flex-direction: column;
   align-items: flex-start;
   padding: 4px 15px 0px;
   gap: 4px;
   transition: max-height 0.3s ease-in-out allow-discrete;
+  scrollbar-gutter: stable;
 }
 
 @starting-style {
   #emoticon-list-container {
     max-height: 0;
   }
+}
+
+/* 스크롤바 전체 영역에 대한 스타일 */
+#emoticon-list-container::-webkit-scrollbar {
+  width: 12px; /* 스크롤바의 너비 설정 */
+}
+
+/* 스크롤바의 배경 트랙 스타일 */
+#emoticon-list-container::-webkit-scrollbar-track {
+  background-color: #f0f0f0; /* 트랙 배경색 */
+  border-radius: 3px;
+}
+
+/* 스크롤바의 핸들(움직이는 막대) 스타일 */
+#emoticon-list-container::-webkit-scrollbar-thumb {
+  background-color: #c1c1c1; /* 핸들 색상 */
+  border-radius: 5px; /* 핸들을 둥글게 */
+  border: 2px solid #f0f0f0; /* 핸들 주변에 여백 효과 */
+  cursor: grab;
+}
+
+/* 핸들을 마우스로 클릭하고 드래그하는 동안의 스타일 */
+#emoticon-list-container::-webkit-scrollbar-thumb:active {
+  cursor: grabbing;
+}
+
+#emoticon-list-container::-webkit-scrollbar-thumb:hover {
+  background-color: #a8a8a8; /* 마우스를 올렸을 때 핸들 색상 */
 }
 
 .emoticon-item {
@@ -300,18 +348,21 @@ body.grabbing .emoticon-item {
   margin: auto 3px;
 }
 
+.emoticon-item .emoticon-name {
+  text-align: start;
+  line-height: 15px;
+}
+
 .hidden {
   display: none !important;
 }
 
 #refresh-btn {
+  position: relative;
   background: none;
   border: none;
   cursor: pointer;
-  padding: 4px;
-  margin-right: 10px;
-  position: absolute;
-  right: 6%;
+  padding: 0;
   display: flex;
   align-items: center;
   border-radius: 50%;
@@ -333,7 +384,7 @@ body.grabbing .emoticon-item {
 }
 
 .translate-x-off {
-  transform: translateX(-242px);
+  transform: translateX(-445px);
 }
 
 .highlight {
@@ -344,14 +395,17 @@ body.grabbing .emoticon-item {
 }
 
 #update-notice {
-  width: 205px;
-  height: 50px;
+  align-items: center;
+  justify-content: center;
+  position: absolute;
+  left: 12px;
+  width: 95%;
+  height: 45px;
   padding: 10px;
-  margin: 20px auto;
   font-weight: bold;
   font-size: 14px;
   color: #c20808;
-  background-image: linear-gradient(178deg, #ff000070, #ffffff9c);
+  background-color: #ffcccc;
   border-radius: 7px;
   display: none;
   transition-duration: 0.3s;
@@ -371,11 +425,16 @@ body.grabbing .emoticon-item {
   align-items: center;
   padding: 7px 12px 4px;
   border-top: 1px solid #e0e0e0;
-  margin: 12px auto;
+  margin: 6px auto 12px;
+}
+
+#control-inner-wrapper {
+  display: flex;
 }
 
 /* 새로고침 아이콘 버튼 */
 #reload-btn {
+  position: relative;
   background: none;
   border: none;
   cursor: pointer;
@@ -385,6 +444,73 @@ body.grabbing .emoticon-item {
   align-items: center;
   border-radius: 50%;
   transition: background-color 0.2s;
+}
+
+.range-tooltip {
+  position: relative;
+}
+.range-tooltip .tooltip-text {
+  visibility: hidden; /* 평소에는 숨김 */
+  width: 30px;
+  word-break: keep-all;
+  background-color: #e1e1e5;
+  color: #202224;
+  text-align: center;
+  padding: 5px 0;
+  border-radius: 6px;
+  font-size: 9px;
+  font-weight: bold;
+  line-height: 11px;
+
+  /* 위치 설정 */
+  position: absolute;
+  z-index: 9999; /* 다른 요소 위에 보이도록 z-index 설정 */
+  bottom: 110%; /* 버튼 위쪽에 위치 */
+  left: 55%;
+  margin-left: -5px; /* 너비의 절반만큼 왼쪽으로 이동 */
+
+  /* 부드럽게 나타나는 효과 */
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+/* 툴팁 텍스트 박스 스타일 */
+#reload-btn #update-icon .tooltip-text,
+#reload-btn .tooltip-text,
+#refresh-btn .tooltip-text,
+.toggle-wrapper .tooltip-text {
+  visibility: hidden; /* 평소에는 숨김 */
+  width: 63px;
+  word-break: keep-all;
+  background-color: #e1e1e5;
+  color: #202224;
+  text-align: center;
+  padding: 5px 0;
+  border-radius: 6px;
+  font-size: 9px;
+  font-weight: bold;
+  line-height: 11px;
+
+  /* 위치 설정 */
+  position: absolute;
+  z-index: 9999; /* 다른 요소 위에 보이도록 z-index 설정 */
+  bottom: 110%; /* 버튼 위쪽에 위치 */
+  left: 24%;
+  margin-left: -20px; /* 너비의 절반만큼 왼쪽으로 이동 */
+
+  /* 부드럽게 나타나는 효과 */
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+/* 컨테이너에 마우스를 올렸을 때 툴팁 텍스트를 보이게 함 */
+.range-tooltip:hover .tooltip-text,
+#reload-btn #update-icon:hover .tooltip-text,
+#reload-btn:hover .tooltip-text,
+#refresh-btn:hover .tooltip-text,
+.toggle-wrapper:hover .tooltip-text {
+  visibility: visible;
+  opacity: 1;
 }
 
 #reload-btn:hover {
@@ -415,6 +541,7 @@ body.grabbing .emoticon-item {
 .toggle-wrapper {
   display: flex;
   align-items: center;
+  position: relative;
   cursor: pointer;
 }
 
@@ -475,4 +602,169 @@ input:checked + .slider:before {
   font-size: 11px;
   color: #a0a0a0;
   font-family: "Gowun Dodum", sans-serif;
+}
+
+#size-wrapper {
+  width: 140px;
+  margin-left: 12px;
+  border: 1px solid #c2c2c2;
+  padding: 5px;
+  border-radius: 8px;
+}
+
+#size-wrapper > div {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 5px;
+}
+
+#emoji-size-range {
+  -webkit-appearance: none; /* 크롬, 사파리, 엣지 등 WebKit 기반 브라우저용 기본 스타일 제거 */
+  appearance: none;
+  width: 110px; /* 원하는 너비 지정 */
+  height: 8px; /* 슬라이더 높이 조절 */
+  background: linear-gradient(
+    to right,
+    #7b36b4a0 0%,
+    #7b36b4a0 calc((var(--value) - 20) / 36 * 100%),
+    #7b36b433 calc((var(--value) - 20) / 36 * 100%),
+    #7b36b433 100%
+  ); /* 진행된 부분 색상(#4caf50)과 나머지 색상(#ddd) 구분, --value에 자바스크립트로 값 넣음 */
+  border-radius: 4px;
+  outline: none;
+}
+
+/* 슬라이더 thumb 커스텀 */
+#emoji-size-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 15px;
+  height: 15px;
+  background: #a78bd7; /* thumb 색상 */
+  cursor: pointer;
+  border-radius: 50%; /* 원형 thumb */
+  transition: background 0.3s ease;
+}
+
+#emoji-size-range::-webkit-slider-thumb:hover {
+  background: #8655da;
+}
+
+#emoji-size-value {
+  margin-left: 6px;
+  font-weight: bold;
+}
+
+#blocklist-wrapper {
+  width: 48%;
+  margin: 0 5px 5px;
+}
+
+#blocklist-wrapper > h3 {
+  margin: 0 0 4px;
+}
+
+#blocklist-title {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+#blocklist-title h3,
+#blocklist-title h5 {
+  margin: 0 0 4px;
+}
+
+.block-unavailable-message {
+  margin: auto;
+}
+
+#blocklist {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, 25px);
+  grid-auto-rows: 54px;
+  row-gap: 3px;
+  column-gap: 8px;
+  justify-content: start;
+  overflow-y: scroll;
+  max-height: 310px;
+  scrollbar-gutter: stable;
+}
+
+/* 스크롤바 전체 영역에 대한 스타일 */
+#blocklist::-webkit-scrollbar {
+  width: 12px; /* 스크롤바의 너비 설정 */
+}
+
+/* 스크롤바의 배경 트랙 스타일 */
+#blocklist::-webkit-scrollbar-track {
+  background-color: #f0f0f0; /* 트랙 배경색 */
+  border-radius: 3px;
+}
+
+/* 스크롤바의 핸들(움직이는 막대) 스타일 */
+#blocklist::-webkit-scrollbar-thumb {
+  background-color: #c1c1c1; /* 핸들 색상 */
+  border-radius: 5px; /* 핸들을 둥글게 */
+  border: 2px solid #f0f0f0; /* 핸들 주변에 여백 효과 */
+  cursor: grab;
+}
+
+/* 핸들을 마우스로 클릭하고 드래그하는 동안의 스타일 */
+#blocklist::-webkit-scrollbar-thumb:active {
+  cursor: grabbing;
+}
+
+#blocklist::-webkit-scrollbar-thumb:hover {
+  background-color: #a8a8a8; /* 마우스를 올렸을 때 핸들 색상 */
+}
+
+#blocklist div {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: fit-content;
+  gap: 8px;
+  padding: 2px;
+  margin: 4px auto;
+  border-radius: 4px;
+  background: #ffffffa6;
+  box-shadow: 0 0 5px 1px #00000010;
+}
+
+#clear-all-blocked-emoticons-btn {
+  background: none;
+  background-color: #ff004f96;
+  border: none;
+  cursor: pointer;
+  font-size: 16px;
+  padding: 2px;
+  line-height: 1;
+  border-radius: 5px;
+  opacity: 0.6;
+  margin-left: 3px;
+}
+
+#clear-all-blocked-emoticons-btn.hoverable:hover {
+  opacity: 1;
+}
+
+.unblock-btn {
+  width: 22px;
+  margin: 0;
+  padding: 0;
+  border-radius: 3px;
+  background-color: #ffffffb5;
+  box-shadow: 0px 0px 5px 3px #fabecaa6;
+  font-size: 10px;
+  user-select: none;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: all 0.3s ease-in-out;
+}
+
+.unblock-btn:hover {
+  background-color: #ffffffb5;
+  border: 1px solid #80000057;
+  box-shadow: 0px 0px 5px 3px #ff7171a6;
 }

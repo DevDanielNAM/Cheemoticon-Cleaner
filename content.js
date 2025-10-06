@@ -1,14 +1,405 @@
+if (!window.__cheemo_initialized__) {
+  window.__cheemo_initialized__ = true;
+
+  window.__cheemo_state__ = window.__cheemo_state__ || { enabled: true };
+  function setEnabled(on) {
+    window.__cheemo_state__.enabled = on;
+    if (on) {
+      // 다시 켜질 때: 루트 감시 + 필터 바인딩 보장
+      ensureChatRootObserver();
+      const root = document.querySelector(
+        "[class*=live_chatting_list_container__],[class*=vod_chatting_list__]"
+      );
+      if (root) installChatEmojiFilter(root);
+      // 이모티콘 관련 UI/옵저버 기능(최근/툴팁/리사이즈 등)도 켜기
+      if (!window.myEmoticonExtensionInstance && window.EmoticonExtension) {
+        window.myEmoticonExtensionInstance = new window.EmoticonExtension();
+      }
+    } else {
+      // 끌 때: 옵저버/리스너 해제 + 숨긴 이모티콘 원복
+      try {
+        if (window.__cheemo_chat_mo__) {
+          window.__cheemo_chat_mo__.disconnect();
+          window.__cheemo_chat_mo__ = null;
+        }
+        if (
+          window.__cheemo_chat_click_listener__ &&
+          window.__cheemo_chat_root
+        ) {
+          window.__cheemo_chat_root.removeEventListener(
+            "click",
+            window.__cheemo_chat_click_listener__,
+            true
+          );
+        }
+      } catch {}
+      const root = document.querySelector(
+        "[class*=live_chatting_list_container__],[class*=vod_chatting_list__]"
+      );
+      if (root) {
+        root.querySelectorAll("img").forEach((img) => {
+          img.style.display = "";
+        });
+        root
+          .querySelectorAll(
+            "[class*=live_chatting_message_button__], [class*=live_chatting_scroll_message__]"
+          )
+          .forEach((btn) => {
+            btn.style.display = "";
+          });
+      }
+      if (window.myEmoticonExtensionInstance) {
+        window.myEmoticonExtensionInstance.cleanup?.();
+        window.myEmoticonExtensionInstance = null;
+      }
+    }
+  }
+
+  // 항상 살아있는 메시지 리스너 (OFF여도 응답)
+  chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+    switch (request.type) {
+      case "CHEEMO_PING":
+        sendResponse({
+          alive: true,
+          enabled: window.__cheemo_state__?.enabled,
+        });
+        return; // 동기 응답
+
+      case "CHEEMO_ENABLE":
+        setEnabled(true);
+        sendResponse({ ok: true, enabled: true });
+        return;
+
+      case "CHEEMO_DISABLE":
+        setEnabled(false);
+        sendResponse({ ok: true, enabled: false });
+        return;
+
+      case "GET_USER_HASH":
+        try {
+          const userHash = localStorage.getItem("userStatus.idhash") || null;
+          sendResponse({ userStatusIdHash: userHash });
+        } catch {
+          sendResponse({ userStatusIdHash: null });
+        }
+        return;
+    }
+  });
+}
+
 // 전역 window 객체에 현재 스크립트의 실행 여부를 기록
 if (window.myEmoticonExtensionInstance) {
   // 이전 버전의 Observer 등을 정리하는 함수를 호출
   window.myEmoticonExtensionInstance.cleanup();
 }
 
-// 확장 프로그램 기능 시작 전, 일시정지 상태인지 확인
-chrome.storage.local.get("isPaused", (data) => {
-  if (data.isPaused) {
-    return; // isPaused가 true이면, 아래 모든 코드 실행을 중단
+window.CONTEXT_ALIVE = true;
+
+window.__cheemo_chat_root = window.__cheemo_chat_root ?? null; // 현재 리스너가 붙은 채팅 루트
+window.__cheemo_chat_root_observer = window.__cheemo_chat_root_observer ?? null; // 루트 등장/교체 감시자
+window.__cheemo_sizePx = window.__cheemo_sizePx ?? 32;
+window.__cheemo_styleEl = window.__cheemo_styleEl ?? null;
+window.__cheemo_resize_observer = window.__cheemo_resize_observer ?? null;
+window.__cheemo_container_observer = window.__cheemo_container_observer ?? null;
+
+function safeLocalSet(obj) {
+  if (!chrome?.runtime?.id) return false; // 컨텍스트 종료면 그냥 패스
+  try {
+    chrome.storage.local.set(obj);
+    return true;
+  } catch (e) {
+    if (String(e).includes("Extension context invalidated")) {
+      console.warn("Context invalidated while saving:", obj);
+      return false;
+    }
+    throw e;
   }
+}
+
+async function safeLocalGet(keyOrKeys) {
+  if (!chrome?.runtime?.id) return {};
+  try {
+    return await chrome.storage.local.get(keyOrKeys);
+  } catch (e) {
+    if (String(e).includes("Extension context invalidated")) {
+      console.warn("Context invalidated while getting:", keyOrKeys);
+      return {};
+    }
+    throw e;
+  }
+}
+
+function ensureSizeStyleEl() {
+  if (!__cheemo_styleEl) {
+    __cheemo_styleEl = document.getElementById("cheemoticon-size-style");
+    if (!__cheemo_styleEl) {
+      __cheemo_styleEl = document.createElement("style");
+      __cheemo_styleEl.id = "cheemoticon-size-style";
+      document.head.appendChild(__cheemo_styleEl);
+    }
+  }
+  return __cheemo_styleEl;
+}
+
+// 컨테이너 폭으로 적정 열 개수(n)와 colGap 계산
+function computeColumnsAndGap(
+  container,
+  cell,
+  {
+    minGap = 4, // 최소 간격
+    maxGap = 20, // 최대 간격(과도하게 벌어짐 방지)
+    paddingAware = true,
+  } = {}
+) {
+  if (!container) return { n: 1, gap: minGap };
+
+  const cs = getComputedStyle(container);
+  const pl = paddingAware ? parseFloat(cs.paddingLeft || "0") : 0;
+  const pr = paddingAware ? parseFloat(cs.paddingRight || "0") : 0;
+
+  // 실제 사용할 내부 폭
+  const W = container.clientWidth - pl - pr;
+  const safeCell = Math.max(24, cell); // 너무 작지 않게 보호
+
+  // 1) 최소 gap 가정으로 열 개수 산출
+  let n = Math.max(1, Math.floor((W + minGap) / (safeCell + minGap)));
+
+  // 2) 남는 공간을 (n-1)개 gap으로 나눔
+  let gap = n > 1 ? Math.floor((W - n * safeCell) / (n - 1)) : 0;
+  gap = Math.max(minGap, Math.min(maxGap, gap));
+
+  // 3) 새 gap으로 다시 한 번 n을 조정(간혹 한 열 더 들어갈 수 있는 경우)
+  const tryN = Math.floor((W + gap) / (safeCell + gap));
+  if (tryN > n) n = tryN;
+
+  // 마지막 안전 체크: 과적재 방지
+  while (n > 1 && n * safeCell + (n - 1) * gap > W) {
+    n--;
+  }
+  return { n: Math.max(1, n), gap: Math.max(0, gap) };
+}
+
+function recomputeGrid(sizePx) {
+  // 삭제 버튼 크기(셀/이미지에 비례, 너무 작거나 크지 않게 클램프)
+  const del = Math.max(12, Math.min(20, Math.round(sizePx * 0.45)));
+  const delFont = Math.max(10, Math.round(del * 0.72));
+
+  __cheemo_sizePx = sizePx; // 최신값 저장
+  const cell = Math.max(sizePx + 8, 24);
+  const rowGap = 6;
+
+  const container = document.querySelector("[class*=emoticon_list__]");
+
+  let n = 1,
+    colGap = 6;
+  if (container) {
+    const res = computeColumnsAndGap(container, cell, {
+      minGap: 4,
+      maxGap: 16,
+    });
+    n = res.n;
+    colGap = res.gap;
+  }
+
+  const styleEl = ensureSizeStyleEl();
+  styleEl.textContent = `
+     [class*=emoticon_list__] img {
+      width: ${sizePx}px !important;
+      height: ${sizePx}px !important;
+      display: block;
+    }
+
+    /* 그리드 칸 크기(열/행)와 간격을 함께 조정 */
+    [class*=emoticon_list__] {
+      display: grid !important;
+      grid-template-columns: repeat(auto-fill, ${cell}px) !important;
+      grid-auto-rows: ${cell}px !important;
+      row-gap: ${rowGap}px !important;
+      column-gap: ${colGap}px !important;
+      justify-content: start !important;
+      padding: 0 5px; 
+    }
+
+    /* 각 셀(li)을 셀 크기에 맞춰 정렬 */
+    [class*=emoticon_list__] > li {
+      width: ${cell}px !important;
+      height: ${cell}px !important;
+      box-sizing: border-box !important;
+      display: flex !important;
+      align-items: center !important;
+      justify-content: center !important;
+      position: relative !important;
+    }
+
+    /* 삭제 버튼을 항상 좌상단(또는 우상단) 고정 */
+    [class*=emoticon_list__] > li .emoji-delete-btn {
+      width: ${del}px;
+      height: ${del}px;
+      line-height: ${del - 2}px;
+      font-size: ${delFont}px;
+    }
+
+    [class*=emoticon_list__] > li .emoji-delete-btn > svg {
+      width: ${sizePx < 28 ? 4 : sizePx < 40 ? 6 : 8}px;
+      height: ${sizePx < 28 ? 4 : sizePx < 40 ? 6 : 8}px;
+    }
+  `;
+
+  // 컨테이너가 있으면 리사이즈 감시 설치/갱신
+  if (container) {
+    if (__cheemo_resize_observer) {
+      try {
+        __cheemo_resize_observer.disconnect();
+      } catch {}
+    }
+    __cheemo_resize_observer = new ResizeObserver(() => {
+      // 폭이 변하면 현재 크기 기준으로 재계산
+      recomputeGrid(__cheemo_sizePx);
+    });
+    __cheemo_resize_observer.observe(container);
+  }
+}
+
+function ensureContainerObserver() {
+  if (__cheemo_container_observer) return;
+
+  __cheemo_container_observer = new MutationObserver(() => {
+    const container = document.querySelector("[class*=emoticon_list__]");
+    if (container) {
+      // 컨테이너가 나타나는 즉시 현재 크기로 재계산
+      recomputeGrid(__cheemo_sizePx);
+      // 계속 감시할 필요 없으면 다음 줄 주석 해제해 끊어도 됨
+      // __cheemo_container_observer.disconnect(); __cheemo_container_observer = null;
+    }
+  });
+  __cheemo_container_observer.observe(document.body, {
+    childList: true,
+    subtree: true,
+  });
+
+  // 이미 존재한다면 즉시 1회 실행
+  if (document.querySelector("[class*=emoticon_list__]")) {
+    recomputeGrid(__cheemo_sizePx);
+  }
+}
+
+// src를 '키'로 표준화(쿼리 제거)
+function emojiKeyFromSrc(src) {
+  try {
+    const u = new URL(src, location.href);
+    u.search = ""; // ?type=f60_60 같은 변형 제거
+    return u.href;
+  } catch {
+    // 절대/상대 경로 혼재 시 단순 폴백
+    return src.split("?")[0];
+  }
+}
+
+// 전역: 블랙리스트 Set 관리
+window.EMOJI_BLOCKSET = window.EMOJI_BLOCKSET ?? new Set();
+
+async function loadEmojiBlockset() {
+  const { chzzkEmojiBlocklist = [] } = await safeLocalGet(
+    "chzzkEmojiBlocklist"
+  );
+  EMOJI_BLOCKSET = new Set(chzzkEmojiBlocklist);
+}
+
+// 숨김/복원 통합 처리
+function updateEmojiVisibility(imgEl) {
+  const key = emojiKeyFromSrc(imgEl.src);
+  const blocked = EMOJI_BLOCKSET.has(key);
+
+  const btn = imgEl.closest(
+    "[class*=live_chatting_message_button__], [class*=live_chatting_scroll_message__]"
+  );
+  if (btn) {
+    // 버튼 단위로 숨김/복원
+    btn.style.display = blocked ? "none" : "";
+  } else {
+    // fallback: 이미지만 숨김/복원
+    imgEl.style.display = blocked ? "none" : "";
+  }
+}
+
+// 채팅 컨테이너에 옵저버/위임
+function installChatEmojiFilter(root) {
+  if (!root) return;
+
+  // 이전 리스너/옵저버 제거
+  if (window.__cheemo_chat_click_listener__) {
+    root.removeEventListener(
+      "click",
+      window.__cheemo_chat_click_listener__,
+      true
+    );
+  }
+  if (window.__cheemo_chat_mo__) {
+    try {
+      window.__cheemo_chat_mo__.disconnect();
+    } catch {}
+  }
+
+  // 새 핸들러 등록
+  const handler = (e) => {
+    if (!CONTEXT_ALIVE || !chrome?.runtime?.id) return;
+    const target = e.target;
+    if (!(target instanceof HTMLImageElement)) return;
+    if (
+      !target.closest(
+        "[class*=live_chatting_message_button__],[class*=live_chatting_scroll_message__]"
+      )
+    )
+      return;
+    if (!e.altKey) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+    const key = emojiKeyFromSrc(target.src);
+    if (!EMOJI_BLOCKSET.has(key)) {
+      EMOJI_BLOCKSET.add(key);
+      safeLocalSet({ chzzkEmojiBlocklist: Array.from(EMOJI_BLOCKSET) }); // 안전 저장
+      updateEmojiVisibility(target);
+    }
+  };
+  window.__cheemo_chat_click_listener__ = handler;
+  root.addEventListener("click", handler, true);
+
+  // 초기 스캔
+  root
+    .querySelectorAll(
+      "[class*=live_chatting_message_text__] img, [class*=live_chatting_scroll_message__] img"
+    )
+    .forEach(updateEmojiVisibility);
+
+  const mo = new MutationObserver((muts) => {
+    for (const m of muts) {
+      (m.addedNodes || []).forEach((node) => {
+        if (!(node instanceof HTMLElement)) return;
+
+        if (
+          node.matches(
+            "[class*=live_chatting_message_text__], [class*=live_chatting_message_button__], [class*=live_chatting_scroll_message__]"
+          )
+        ) {
+          node.querySelectorAll("img").forEach(updateEmojiVisibility);
+        } else {
+          node
+            .querySelectorAll?.(
+              "[class*=live_chatting_message_text__] img, [class*=live_chatting_message_button__] img, [class*=live_chatting_scroll_message__] img"
+            )
+            .forEach(updateEmojiVisibility);
+        }
+      });
+    }
+  });
+  mo.observe(root, { childList: true, subtree: true });
+  // 나중에 OFF/재바인딩 시 disconnect 하려면 전역에 보관
+  window.__cheemo_chat_mo__ = mo;
+}
+
+(() => {
+  if (window.EmoticonExtension) return;
   /**
    * 확장 프로그램의 메인 클래스
    * 모든 기능을 캡슐화하고 상태를 관리
@@ -18,6 +409,7 @@ chrome.storage.local.get("isPaused", (data) => {
       this.observers = new Map();
       this.isResizing = false;
       this.currentMax = null;
+      this.isDeletionLocked = false;
       this.init();
     }
 
@@ -41,18 +433,31 @@ chrome.storage.local.get("isPaused", (data) => {
       this.handleInputShortcut = this.handleInputShortcut.bind(this);
       this.injectAndCommunicate();
 
-      const mainObserver = new MutationObserver(() => {
-        // DOM에 어떤 변화든 감지되면, 무조건 기능 적용 함수를 호출
-        this.applyRecentEmoticonFeatures();
-        this.applyShortcutTooltip();
-        this.updateInputPlaceholder();
+      chrome.storage.local.get("isDeletionLocked", (data) => {
+        this.isDeletionLocked = !!data.isDeletionLocked;
       });
 
-      this.observers.set("main", mainObserver);
-      mainObserver.observe(document.body, {
-        childList: true,
-        subtree: true,
+      let pending = false;
+      const mainObserver = new MutationObserver(() => {
+        // DOM에 어떤 변화든 감지되면, 무조건 기능 적용 함수를 호출
+        if (pending) return;
+        pending = true;
+        requestAnimationFrame(() => {
+          pending = false;
+          this.applyShortcutTooltip();
+          this.updateInputPlaceholder();
+          this.applyRecentEmoticonFeatures();
+        });
       });
+
+      const popupRoot = document.body;
+      this.observers.set("main", mainObserver);
+      if (popupRoot) {
+        mainObserver.observe(popupRoot, {
+          childList: true,
+          subtree: true,
+        });
+      }
 
       // 초기 로드 시에도 한 번 실행
       this.applyRecentEmoticonFeatures();
@@ -97,6 +502,36 @@ chrome.storage.local.get("isPaused", (data) => {
             this.applyUiSettings(container);
           }
         }
+
+        if (namespace === "local" && changes.chzzkEmojiSize) {
+          __cheemo_sizePx = changes.chzzkEmojiSize.newValue;
+          recomputeGrid(__cheemo_sizePx);
+        }
+
+        if (namespace === "local" && changes.emoticonOrder) {
+          // 재정렬 가드 해제
+          const container = document.querySelector(".flicking-camera");
+          if (container) container.removeAttribute("data-reordered");
+          // DOM 안정화 후 강제 재정렬
+          requestAnimationFrame(() => {
+            try {
+              this.reorderEmoticonCategories();
+            } catch {}
+          });
+        }
+
+        if (namespace === "local" && changes.chzzkEmojiBlocklist) {
+          EMOJI_BLOCKSET = new Set(changes.chzzkEmojiBlocklist.newValue || []);
+          // 반영: 현재 표시 중인 img들 다시 스캔(간단히 루트 재스캔)
+          const root = document.querySelector(
+            "[class*=live_chatting_list_container__],[class*=vod_chatting_list__]"
+          );
+          root
+            ?.querySelectorAll(
+              "[class*=live_chatting_message_text__] img, [class*=live_chatting_scroll_message__] img"
+            )
+            .forEach(updateEmojiVisibility);
+        }
       });
     }
 
@@ -104,21 +539,21 @@ chrome.storage.local.get("isPaused", (data) => {
      * 지정된 스크립트 파일을 페이지의 DOM에 삽입하는 유틸리티 함수
      * @param {string} filePath - 확장 프로그램 루트 기준 파일 경로
      */
-    injectScript(filePath) {
+    injectScript(filePath, force = false, version) {
       return new Promise((resolve) => {
-        // window 객체에 우리만의 플래그를 확인하여, 이미 주입되었다면 다시 실행하지 않음
-        if (window.cheemoticonInjected) {
+        const ver = version || Date.now();
+        // force=false면 기존 가드 유지, force=true면 무조건 재주입
+        if (!force && window.cheemoticonInjected) {
           resolve();
           return;
         }
-
         const s = document.createElement("script");
-        s.src = chrome.runtime.getURL(filePath);
+        s.src = chrome.runtime.getURL(filePath) + "?v=" + ver;
         // 스크립트 로드가 끝나면 DOM에서 제거하여 흔적을 남기지 않음
         s.onload = () => {
           s.remove();
-          // 주입에 성공했으면, 다음을 위해 플래그를 남김
-          window.cheemoticonInjected = true;
+          // 현재 적용된 빌드 식별자 저장(디버깅/중복 방지)
+          window.cheemoticonInjected = s.src;
           resolve();
         };
         (document.head || document.documentElement).appendChild(s);
@@ -145,9 +580,7 @@ chrome.storage.local.get("isPaused", (data) => {
       // 1. 이모티콘들을 담고 있는 부모 컨테이너를 찾음
       const container = document.querySelector(".flicking-camera");
       if (!container) {
-        console.error(
-          "[치모티콘 정리] Can't find '.flicking-camera' container."
-        );
+        console.error("Can't find '.flicking-camera' container.");
         return;
       }
 
@@ -229,9 +662,13 @@ chrome.storage.local.get("isPaused", (data) => {
         const titleWrapper = document.createElement("div");
         titleWrapper.className = "emoticon-subtitle-wrapper";
         titleElement.parentNode.insertBefore(titleWrapper, titleElement);
+
         titleWrapper.appendChild(titleElement);
+
         const clearAllButton = this.createClearAllButton();
         titleWrapper.appendChild(clearAllButton);
+
+        this.createOrUpdateLockButton(titleWrapper);
       }
 
       // (매번 실행) 제목 텍스트에 최신 개수를 업데이트
@@ -505,6 +942,81 @@ chrome.storage.local.get("isPaused", (data) => {
     }
 
     /**
+     * 잠금 버튼을 생성하거나 업데이트하는 함수
+     * @param {HTMLElement} wrapper - 버튼들을 감싸는 부모 요소
+     */
+    createOrUpdateLockButton(wrapper) {
+      let lockButton = document.getElementById("lock-emoticon-deletion-btn");
+
+      if (!lockButton) {
+        lockButton = document.createElement("button");
+        lockButton.id = "lock-emoticon-deletion-btn";
+        lockButton.title = "이모티콘 삭제 잠금";
+
+        // 아이콘 SVG들
+        const unlockIconSVG = `<svg class="unlocked-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <path d="M16 10V7a4 4 0 10-8 0" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      <rect x="5" y="10" width="14" height="10" rx="2" stroke="currentColor" stroke-width="2"/>
+      <circle cx="12" cy="15" r="1.5" fill="currentColor"/>
+    </svg>`;
+        const lockIconSVG = `<svg class="locked-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <path d="M7 10V7a5 5 0 1110 0v3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        <rect x="5" y="10" width="14" height="10" rx="2" stroke="currentColor" stroke-width="2"/>
+        <circle cx="12" cy="15" r="1.5" fill="currentColor"/>
+      </svg>`;
+
+        lockButton.innerHTML = unlockIconSVG + lockIconSVG;
+
+        lockButton.addEventListener("click", () => this.toggleDeletionLock());
+
+        const clearAllButton = wrapper.querySelector(
+          "#clear-all-emoticons-btn"
+        );
+        wrapper.insertBefore(lockButton, clearAllButton);
+      }
+
+      this.applyLockStateToUI();
+    }
+
+    /**
+     * 잠금 상태를 토글하고 저장하는 함수
+     */
+    toggleDeletionLock() {
+      // *** 컨텍스트 유효성 검사 ***
+      if (
+        typeof chrome === "undefined" ||
+        !chrome.runtime ||
+        !chrome.runtime.id
+      ) {
+        return;
+      }
+
+      this.isDeletionLocked = !this.isDeletionLocked;
+      chrome.storage.local.set({ isDeletionLocked: this.isDeletionLocked });
+      this.applyLockStateToUI();
+    }
+
+    /**
+     * 현재 잠금 상태를 UI에 적용하는 함수
+     */
+    applyLockStateToUI() {
+      const container = document.getElementById("recent_emoticon");
+      if (!container) return;
+
+      container.classList.toggle("emoticons-locked", this.isDeletionLocked);
+
+      const lockButton = document.getElementById("lock-emoticon-deletion-btn");
+      if (lockButton) {
+        const unlockedIcon = lockButton.querySelector(".unlocked-icon");
+        const lockedIcon = lockButton.querySelector(".locked-icon");
+        if (unlockedIcon && lockedIcon) {
+          unlockedIcon.style.display = this.isDeletionLocked ? "none" : "block";
+          lockedIcon.style.display = this.isDeletionLocked ? "block" : "none";
+        }
+      }
+    }
+
+    /**
      * 전체 삭제 버튼 엘리먼트 생성
      */
     createClearAllButton() {
@@ -520,7 +1032,8 @@ chrome.storage.local.get("isPaused", (data) => {
     createDeleteButton(emojiId, emoticonsKey, item) {
       const deleteButton = document.createElement("span");
       deleteButton.className = "emoji-delete-btn";
-      deleteButton.innerText = "x";
+      deleteButton.innerHTML = `<svg width="8" height="8" viewBox="0 0 10 10" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M1 1L9 9M9 1L1 9" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path></svg>`;
 
       deleteButton.addEventListener("click", (e) => {
         this.deleteEmoticon(e, emojiId, emoticonsKey, item);
@@ -640,7 +1153,9 @@ chrome.storage.local.get("isPaused", (data) => {
 
           // 최종 높이를 chrome.storage에 저장
           const finalHeight = popupContainer.offsetHeight;
-          chrome.storage.local.set({ chzzkEmoticonPopupHeight: finalHeight });
+
+          if (!CONTEXT_ALIVE || !chrome?.runtime?.id) return;
+          safeLocalSet({ chzzkEmoticonPopupHeight: finalHeight });
         };
 
         // document에 mousemove와 mouseup 이벤트 리스너를 등록하여
@@ -666,6 +1181,10 @@ chrome.storage.local.get("isPaused", (data) => {
 
       // 1. 누른 키가 'e'가 아니면 무시
       if (event.code !== "KeyE") {
+        return;
+      }
+
+      if (event.ctrlKey || event.shiftKey || event.altKey || event.metaKey) {
         return;
       }
 
@@ -838,6 +1357,10 @@ chrome.storage.local.get("isPaused", (data) => {
         return;
       }
 
+      if (event.ctrlKey || event.shiftKey || event.altKey || event.metaKey) {
+        return;
+      }
+
       const target = event.target;
       const isTyping =
         target.tagName === "INPUT" ||
@@ -860,25 +1383,123 @@ chrome.storage.local.get("isPaused", (data) => {
       textarea.focus();
     }
   }
+  window.EmoticonExtension = EmoticonExtension; // 전역 프로퍼티로만 노출
+})();
 
-  // 확장 프로그램 인스턴스 생성 및 실행
-  const emoticonExtension = new EmoticonExtension();
+// 확장 프로그램 인스턴스 생성 및 실행
+window.emoticonExtension =
+  window.emoticonExtension || new window.EmoticonExtension();
 
-  // 전역 변수에 현재 인스턴스를 할당
-  window.myEmoticonExtensionInstance = emoticonExtension;
+// 전역 변수에 현재 인스턴스를 할당
+window.myEmoticonExtensionInstance = window.emoticonExtension;
 
-  window.addEventListener("beforeunload", () => {
-    const observer = emoticonExtension.observers.get("main");
-    if (observer) {
-      observer.disconnect();
+(async () => {
+  const { chzzkEmojiSize = 32 } = await safeLocalGet("chzzkEmojiSize");
+  __cheemo_sizePx = chzzkEmojiSize;
+  recomputeGrid(__cheemo_sizePx); // 지금 당장 컨테이너가 없어도 OK(나중에 다시 계산됨)
+
+  await loadEmojiBlockset();
+  ensureContainerObserver(); // 컨테이너 등장/교체 감시
+
+  // 새 탭/SPA 전환에서도 자동 재바인딩
+  ensureChatRootObserver();
+  const { isPaused = false } = await chrome.storage.local.get("isPaused");
+  setEnabled(!isPaused); // 시작 시 ON/OFF 반영
+
+  const root = document.querySelector(
+    "[class*=live_chatting_list_container__],[class*=vod_chatting_list__]"
+  );
+  if (root) installChatEmojiFilter(root); // 초기 페이지에서도 즉시 바인딩
+})();
+
+function ensureChatRootObserver() {
+  if (__cheemo_chat_root_observer) return;
+
+  const rebind = () => {
+    const root = document.querySelector(
+      "[class*=live_chatting_list_container__],[class*=vod_chatting_list__]"
+    );
+    if (!root || root === __cheemo_chat_root) return;
+
+    // 이전 루트에 붙어 있던 리스너/옵저버 정리
+    if (__cheemo_chat_root) {
+      if (window.__cheemo_chat_click_listener__) {
+        __cheemo_chat_root.removeEventListener(
+          "click",
+          window.__cheemo_chat_click_listener__,
+          true
+        );
+      }
+      if (window.__cheemo_chat_mo__) {
+        try {
+          window.__cheemo_chat_mo__.disconnect();
+        } catch {}
+        window.__cheemo_chat_mo__ = null;
+      }
     }
+
+    // 새 루트로 교체하고 필터 설치
+    __cheemo_chat_root = root;
+    installChatEmojiFilter(__cheemo_chat_root);
+
+    // 블록셋이 이미 로드되어 있다면 즉시 한 번 더 전체 적용
+    __cheemo_chat_root
+      .querySelectorAll(
+        "[class*=live_chatting_message_text__] img, [class*=live_chatting_scroll_message__] img"
+      )
+      .forEach(updateEmojiVisibility);
+  };
+
+  // DOM 변화 감시: 루트가 나타나거나 교체되면 rebind
+  __cheemo_chat_root_observer = new MutationObserver(rebind);
+  __cheemo_chat_root_observer.observe(document.body, {
+    childList: true,
+    subtree: true,
   });
 
-  chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-    if (request.type === "GET_USER_HASH") {
-      const userHash = localStorage.getItem("userStatus.idhash");
-      sendResponse({ userStatusIdHash: userHash });
-      return true; // 비동기 응답을 위해 true 반환
-    }
-  });
+  // SPA 네비게이션 대응: pushState/replaceState/popstate 때도 재확인
+  const wrapHistory = (fn) =>
+    function (...args) {
+      const r = fn.apply(history, args);
+      setTimeout(rebind, 0);
+      return r;
+    };
+  if (!history.__cheemo_patched) {
+    history.pushState = wrapHistory(history.pushState);
+    history.replaceState = wrapHistory(history.replaceState);
+    window.addEventListener("popstate", rebind);
+    history.__cheemo_patched = true;
+  }
+
+  // 이미 존재하면 즉시 1회 바인딩
+  rebind();
+}
+
+window.addEventListener("beforeunload", () => {
+  CONTEXT_ALIVE = false;
+
+  const observer = window.emoticonExtension?.observers?.get("main");
+  if (observer) {
+    observer.disconnect();
+  }
+});
+
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  if (request.type === "CHEEMO_REINJECT") {
+    (async () => {
+      await emoticonExtension.injectScript(
+        "inject.js",
+        /*force*/ true,
+        request.version
+      );
+      sendResponse({ ok: true, reinjected: true, v: request.version });
+    })();
+    return true; // async
+  }
+
+  if (request.type === "GET_USER_HASH") {
+    const userHash = localStorage.getItem("userStatus.idhash");
+    sendResponse({ userStatusIdHash: userHash });
+    return true; // 비동기 응답을 위해 true 반환
+  }
 });

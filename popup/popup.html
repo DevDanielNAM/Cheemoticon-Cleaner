@@ -25,14 +25,32 @@
     </div>
 
     <div id="control-wrapper">
-      <div id="max-wrapper">
-        <label
-          >최근 이모티콘 최대 개수<br />(15~60개)<br />
-          <div>
-            <input id="max-count" type="number" min="15" max="60" step="5" />
-            <button id="max-count-confirm-btn">확인</button>
-          </div>
-        </label>
+      <div id="control-inner-wrapper">
+        <div id="max-wrapper">
+          <label
+            ><strong>최근 이모티콘 최대 개수</strong>(15~60개)<br />
+            <div>
+              <input id="max-count" type="number" min="15" max="60" step="5" />
+              <button id="max-count-confirm-btn">확인</button>
+            </div>
+          </label>
+        </div>
+
+        <div id="size-wrapper">
+          <label
+            ><strong>이모티콘 크기</strong><br />(-12~24)<br />
+            <div>
+              <input
+                id="emoji-size-range"
+                type="range"
+                min="20"
+                max="56"
+                step="2"
+              />
+              <span id="emoji-size-value"></span>
+            </div>
+          </label>
+        </div>
       </div>
 
       <div id="btn-and-toggle-wrapper">
@@ -65,7 +83,7 @@
         </button>
 
         <div class="toggle-wrapper">
-          <label class="switch" title="'치모티콘 정리' ON/OFF">
+          <label class="switch">
             <input type="checkbox" id="pause-toggle" />
             <span class="slider"></span>
           </label>
@@ -75,49 +93,71 @@
 
     <div id="description-wrapper">
       <div id="description-on" class="">
-        채팅창의
-        <span class="highlight">'최근 사용한 이모티콘'</span>
-        을 <br />
-        정리해보세요!
+        <span class="highlight">'치지직 이모티콘'</span>
+        을 정리해보세요!
       </div>
       <div id="description-off" class=""><p>치모티콘 잠시 쉬는 중...</p></div>
-    </div>
 
-    <div id="update-notice">
-      새로운 버전이 적용되려면<br />치지직 새로고침이 필요해요!
+      <div id="update-notice">
+        새로운 버전이 적용되려면 치지직 새로고침이 필요해요!
+      </div>
     </div>
 
     <div id="emoticon-list-wrapper">
-      <div id="emoticon-list-title">
-        <span>
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            height="20px"
-            viewBox="0 -960 960 960"
-            width="20px"
-            fill="#000000"
-          >
-            <path d="M400-280v-400l200 200-200 200Z" />
-          </svg>
-          이모티콘 순서 편집</span
-        >
-        <button id="refresh-btn" title="이모티콘 순서 초기화">
-          <svg
-            id="refresh-icon"
-            xmlns="http://www.w3.org/2000/svg"
-            height="24px"
-            viewBox="0 -960 960 960"
-            width="24px"
-            fill="#000000"
-          >
-            <path
-              d="M480-160q-134 0-227-93t-93-227q0-134 93-227t227-93q69 0 132 28.5T720-690v-110h80v280H520v-80h168q-32-56-87.5-88T480-720q-100 0-170 70t-70 170q0 100 70 170t170 70q77 0 139-44t87-116h84q-28 106-114 173t-196 67Z"
-            />
-          </svg>
-        </button>
+      <div id="blocklist-wrapper">
+        <div id="blocklist-title">
+          <h3>차단한 이모티콘</h3>
+          <h5>(Alt+클릭)</h5>
+          <button id="clear-all-blocked-emoticons-btn">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="13px"
+              height="13px"
+              viewBox="0 -960 960 960"
+              fill="#FFFFFF"
+            >
+              <path
+                d="M280-120q-33 0-56.5-23.5T200-200v-520h-40v-80h200v-40h240v40h200v80h-40v520q0 33-23.5 56.5T680-120H280Zm400-600H280v520h400v-520ZM360-280h80v-360h-80v360Zm160 0h80v-360h-80v360ZM280-720v520-520Z"
+              ></path>
+            </svg>
+          </button>
+        </div>
+        <div id="blocklist"></div>
       </div>
-      <div id="emoticon-list-container" class="hidden"></div>
+
+      <div id="emoticon-order-list-wrapper">
+        <div id="emoticon-list-title">
+          <span>
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              height="20px"
+              viewBox="0 -960 960 960"
+              width="20px"
+              fill="#000000"
+            >
+              <path d="M400-280v-400l200 200-200 200Z" />
+            </svg>
+            <h3 style="margin: 0 0 4px">이모티콘 순서 편집</h3></span
+          >
+          <button id="refresh-btn">
+            <svg
+              id="refresh-icon"
+              xmlns="http://www.w3.org/2000/svg"
+              height="24px"
+              viewBox="0 -960 960 960"
+              width="24px"
+              fill="#000000"
+            >
+              <path
+                d="M480-160q-134 0-227-93t-93-227q0-134 93-227t227-93q69 0 132 28.5T720-690v-110h80v280H520v-80h168q-32-56-87.5-88T480-720q-100 0-170 70t-70 170q0 100 70 170t170 70q77 0 139-44t87-116h84q-28 106-114 173t-196 67Z"
+              />
+            </svg>
+          </button>
+        </div>
+        <div id="emoticon-list-container" class="hidden"></div>
+      </div>
     </div>
+
     <script src="popup.js"></script>
   </body>
 </html>

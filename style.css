@@ -38,12 +38,14 @@
 
 /* 이모티콘 아이템에 마우스를 올렸을 때 '닫기' 버튼 보이기 */
 #recent_emoticon ul > li:hover .emoji-delete-btn {
-  display: block !important;
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
 }
 
 .emoticon-subtitle-wrapper {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-start;
   align-items: center;
   margin-bottom: 8px;
 }
@@ -51,7 +53,8 @@
 /* 제목(strong) 요소가 불필요한 공간을 차지하지 않도록 설정 */
 .emoticon-subtitle-wrapper > strong {
   margin-bottom: 0 !important;
-  width: 85%;
+  margin-right: 15px;
+  width: 80%;
 }
 
 /* 휴지통 아이콘 버튼 기본 스타일 */
@@ -136,4 +139,39 @@ body.resizing * {
   .tooltip-text {
   visibility: visible;
   opacity: 1;
+}
+
+/* 이모티콘 삭제 잠금 버튼 스타일 */
+#lock-emoticon-deletion-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+  line-height: 1;
+  border-radius: 6px;
+  opacity: 0.6;
+  margin-right: 4px; /* 잠금 버튼과 휴지통 버튼 사이 간격 */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#lock-emoticon-deletion-btn:hover {
+  opacity: 1;
+  background-color: var(--Surface-Neutral-Alpha-Weakest);
+}
+
+#lock-emoticon-deletion-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* 잠금 상태일 때 '전체 삭제' 버튼 숨기기 */
+#recent_emoticon.emoticons-locked #clear-all-emoticons-btn {
+  display: none !important;
+}
+
+/* 잠금 상태일 때 '개별 삭제' 버튼 숨기기 */
+#recent_emoticon.emoticons-locked ul > li:hover .emoji-delete-btn {
+  display: none !important;
 }

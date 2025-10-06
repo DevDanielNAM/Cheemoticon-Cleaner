@@ -3,9 +3,13 @@ let emojiOrder = [];
 
 // 처음 팝업이 열릴 때 UI를 렌더링
 document.addEventListener("DOMContentLoaded", async () => {
+  dragAndDropEmoticon();
+  await loadEmojiSize();
+
   renderPopupUI();
 
-  dragAndDropEmoticon();
+  bindEmojiSizeSlider();
+  renderBlocklist();
 
   try {
     // 1. 현재 활성화된 치지직 탭을 찾음
@@ -19,10 +23,16 @@ document.addEventListener("DOMContentLoaded", async () => {
     const chzzkTab = tabs[0];
 
     // 2. content.js에 userStatusIdHash를 요청
+    const ok = await ensureContentReady(chzzkTab.id); // 수신자 보장
+    if (!ok) {
+      console.warn("content not ready yet");
+      return;
+    }
+    let userStatusIdHash;
     const hashResponse = await chrome.tabs.sendMessage(chzzkTab.id, {
       type: "GET_USER_HASH",
     });
-    const userStatusIdHash = hashResponse?.userStatusIdHash;
+    userStatusIdHash = hashResponse?.userStatusIdHash;
 
     if (!userStatusIdHash) {
       console.error("Can't get userStatusIdHash.");
@@ -68,6 +78,58 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 });
 
+async function ensureContentReady(tabId) {
+  // 1) 우선 핑
+  try {
+    const pong = await chrome.tabs.sendMessage(tabId, { type: "CHEEMO_PING" });
+    if (pong && pong.alive) return true;
+  } catch (e) {
+    // 수신자 없음 → 아래에서 1회 주입
+  }
+
+  // 2) 수신자가 없으면 ‘부트스트랩’만 1회 주입
+  try {
+    await chrome.scripting.executeScript({
+      target: { tabId, allFrames: false },
+      files: ["content.js"],
+    });
+  } catch (e) {
+    console.warn("bootstrap inject failed", e);
+    return false;
+  }
+
+  // 3) 다시 핑
+  try {
+    const pong2 = await chrome.tabs.sendMessage(tabId, { type: "CHEEMO_PING" });
+    return !!(pong2 && pong2.alive);
+  } catch {
+    return false;
+  }
+}
+
+async function toggleCheemo(tabId, enable) {
+  const ready = await ensureContentReady(tabId);
+  if (!ready) return;
+
+  // ON/OFF 명령
+  await chrome.tabs.sendMessage(tabId, {
+    type: enable ? "CHEEMO_ENABLE" : "CHEEMO_DISABLE",
+  });
+}
+
+document
+  .querySelector("#pause-toggle")
+  .addEventListener("change", async (e) => {
+    const [tab] = await chrome.tabs.query({
+      active: true,
+      currentWindow: true,
+    });
+    const enable = e.target.checked;
+
+    await chrome.storage.local.set({ isPaused: !enable });
+    await toggleCheemo(tab.id, enable);
+  });
+
 // manifest.json 파일의 정보
 const manifest = chrome.runtime.getManifest();
 const version = manifest.version;
@@ -87,6 +149,210 @@ async function loadDisplayMax() {
   maxInput.value = chzzkRecentMax;
 }
 
+// 크기 슬라이더 로딩
+async function loadEmojiSize() {
+  const { chzzkEmojiSize = 32 } = await chrome.storage.local.get(
+    "chzzkEmojiSize"
+  );
+  const range = document.getElementById("emoji-size-range");
+  const value = document.getElementById("emoji-size-value");
+  if (range && value) {
+    range.value = String(chzzkEmojiSize);
+    value.textContent = `${chzzkEmojiSize - 32}`;
+  }
+}
+
+// 크기 슬라이더 바인딩
+function bindEmojiSizeSlider() {
+  const range = document.getElementById("emoji-size-range");
+  const value = document.getElementById("emoji-size-value");
+  if (!range || !value) return;
+
+  function updateRangeColor() {
+    const val = range.value;
+    range.style.setProperty("--value", val);
+    document.getElementById("emoji-size-value").textContent = val - 32;
+  }
+
+  range.addEventListener("input", updateRangeColor);
+  updateRangeColor();
+
+  range.addEventListener("change", async () => {
+    const size = Math.max(20, Math.min(56, parseInt(range.value, 10) || 32));
+    await chrome.storage.local.set({ chzzkEmojiSize: size });
+  });
+}
+
+async function renderBlocklist() {
+  const emoticonBlockList = document.getElementById("blocklist");
+
+  // 현재 활성화된 탭 정보를 가져옴
+  const [tab] = await chrome.tabs.query({
+    active: true,
+    currentWindow: true,
+  });
+
+  // 현재 탭이 치지직인지 확인
+  const isChzzkTab = tab?.url?.startsWith("https://chzzk.naver.com/");
+  if (!isChzzkTab) {
+    emoticonBlockList.innerHTML =
+      '<p class="block-unavailable-message">치지직 탭에서 해제할 수 있어요!</p>';
+    emoticonBlockList.style.display = "flex";
+    return;
+  }
+
+  const { chzzkEmojiBlocklist = [] } = await chrome.storage.local.get(
+    "chzzkEmojiBlocklist"
+  );
+  const box = document.getElementById("blocklist");
+  if (!box) return;
+
+  const clearAllBlockedBtn = document.getElementById(
+    "clear-all-blocked-emoticons-btn"
+  );
+
+  if (!chzzkEmojiBlocklist.length) {
+    box.innerHTML = `<p class="edit-unavailable-message">아직 차단한 이모티콘이 없어요</p>`;
+    box.style.display = "flex";
+
+    clearAllBlockedBtn.disabled = true;
+    return;
+  }
+
+  clearAllBlockedBtn.classList.add("hoverable");
+
+  clearAllBlockedBtn.addEventListener("click", async () => {
+    await chrome.storage.local.set({ chzzkEmojiBlocklist: [] });
+    renderBlocklist(); // 재렌더
+  });
+
+  box.innerHTML = "";
+  chzzkEmojiBlocklist.forEach((url) => {
+    const row = document.createElement("div");
+
+    const img = document.createElement("img");
+    img.src = url;
+    img.width = 20;
+    img.height = 20;
+    img.loading = "lazy";
+    img.decoding = "async";
+    img.referrerPolicy = "no-referrer";
+
+    const btn = document.createElement("button");
+    btn.className = "unblock-btn";
+    btn.textContent = "해제";
+    btn.onclick = async () => {
+      const { chzzkEmojiBlocklist = [] } = await chrome.storage.local.get(
+        "chzzkEmojiBlocklist"
+      );
+      const next = chzzkEmojiBlocklist.filter((u) => u !== url);
+      await chrome.storage.local.set({ chzzkEmojiBlocklist: next });
+      renderBlocklist(); // 재렌더
+    };
+
+    row.append(img, btn);
+    box.appendChild(row);
+  });
+}
+
+function applyTooltip() {
+  const range = document.getElementById("emoji-size-range");
+  const reloadBtn = document.getElementById("reload-btn");
+  const refreshBtn = document.getElementById("refresh-btn");
+  const toggleBtn = document.querySelector(
+    "#btn-and-toggle-wrapper .toggle-wrapper"
+  );
+  if (!range && !reloadBtn && !refreshBtn && !toggleBtn) {
+    return;
+  }
+
+  const rangeContainer = range.parentElement;
+
+  // 1. 이미 툴팁이 내부에 추가되었는지 확인하여 중복 실행을 방지
+  if (
+    rangeContainer.querySelector(".tooltip-text") &&
+    reloadBtn.querySelector(".tooltip-text") &&
+    refreshBtn.querySelector(".tooltip-text") &&
+    toggleBtn.querySelector(".tooltip-text")
+  ) {
+    return;
+  }
+
+  const isReloadVisible =
+    reloadBtn.querySelector("#reload-icon").style.display === "none"
+      ? false
+      : true;
+
+  // 2. 툴팁 텍스트를 담을 span 생성
+  const tooltipText = document.createElement("span");
+  tooltipText.className = "tooltip-text";
+  tooltipText.textContent = isReloadVisible
+    ? "확장프로그램 재실행"
+    : "확장프로그램 업데이트";
+
+  const rangeTooltipText = document.createElement("span");
+  rangeTooltipText.className = "tooltip-text";
+  rangeTooltipText.textContent = range.value - 32;
+
+  const min = parseFloat(range.min);
+  const max = parseFloat(range.max);
+  const val = parseFloat(range.value);
+
+  // 1. 슬라이더 트랙의 실제 너비 계산
+  const thumbWidth = 15; // CSS에서 정한 thumb의 너비 (px)
+  const trackWidth = range.offsetWidth - thumbWidth;
+
+  // 2. 현재 값의 백분율 위치 계산
+  const percent = (val - min) / (max - min);
+
+  // 3. 툴팁의 새로운 left 위치 계산
+  // (트랙 위치 + thumb 너비의 절반)
+  const newPosition = percent * trackWidth + thumbWidth / 2;
+
+  rangeTooltipText.style.left = `${newPosition}px`;
+
+  const refreshTooltipText = document.createElement("span");
+  refreshTooltipText.className = "tooltip-text";
+  refreshTooltipText.textContent = "이모티콘 순서 초기화";
+
+  const toggleTooltipText = document.createElement("span");
+  toggleTooltipText.className = "tooltip-text";
+  toggleTooltipText.textContent = "확장프로그램 ON/OFF";
+
+  // 3. 툴팁 wrapper 역할을 할 클래스를 버튼 자체에 부여
+  reloadBtn.classList.add("reload-tooltip");
+  rangeContainer.classList.add("range-tooltip");
+  refreshBtn.classList.add("refresh-tooltip");
+  toggleBtn.classList.add("toggle-tooltip");
+
+  // 4. 툴팁 텍스트를 버튼의 자식으로 추가
+  reloadBtn.appendChild(tooltipText);
+  rangeContainer.appendChild(rangeTooltipText);
+  refreshBtn.appendChild(refreshTooltipText);
+  toggleBtn.appendChild(toggleTooltipText);
+
+  range.addEventListener("input", async () => {
+    rangeTooltipText.textContent = range.value - 32;
+
+    const min = parseFloat(range.min);
+    const max = parseFloat(range.max);
+    const val = parseFloat(range.value);
+
+    // 1. 슬라이더 트랙의 실제 너비 계산
+    const thumbWidth = 15; // CSS에서 정한 thumb의 너비 (px)
+    const trackWidth = range.offsetWidth - thumbWidth;
+
+    // 2. 현재 값의 백분율 위치 계산
+    const percent = (val - min) / (max - min);
+
+    // 3. 툴팁의 새로운 left 위치 계산
+    // (트랙 위치 + thumb 너비의 절반)
+    const newPosition = percent * trackWidth + thumbWidth / 2;
+
+    rangeTooltipText.style.left = `${newPosition}px`;
+  });
+}
+
 /**
  * 현재 상태에 맞춰 팝업 UI를 그리고 이벤트 리스너를 설정하는 함수
  */
@@ -98,9 +364,11 @@ function renderPopupUI() {
   const descriptionOn = document.getElementById("description-on");
   const descriptionOff = document.getElementById("description-off");
 
-  const emoticonEdit = document.querySelector("#emoticon-list-wrapper span");
+  const emoticonEdit = document.querySelector(
+    "#emoticon-order-list-wrapper span"
+  );
   const emoticonEditArrow = document.querySelector(
-    "#emoticon-list-wrapper svg"
+    "#emoticon-order-list-wrapper svg"
   );
   const emoticonListContainer = document.getElementById(
     "emoticon-list-container"
@@ -127,10 +395,9 @@ function renderPopupUI() {
     // --- 3. 업데이트 필요 여부에 따라 버튼의 모양과 기능을 결정 ---
     if (data.updateNeeded) {
       // 업데이트가 필요한 경우
-      updateNotice.style.display = "block";
+      updateNotice.style.display = "flex";
       newReloadBtn.querySelector("#reload-icon").style.display = "none";
       newReloadBtn.querySelector("#update-icon").style.display = "block";
-      newReloadBtn.title = "'치모티콘 정리' 업데이트";
 
       newReloadBtn.addEventListener("click", applyUpdateAndReloadTabs);
       updateNotice.addEventListener("click", applyUpdateAndReloadTabs);
@@ -139,7 +406,6 @@ function renderPopupUI() {
       updateNotice.style.display = "none";
       newReloadBtn.querySelector("#reload-icon").style.display = "block";
       newReloadBtn.querySelector("#update-icon").style.display = "none";
-      newReloadBtn.title = "'치모티콘 정리' 재실행";
 
       newReloadBtn.addEventListener("click", requestExtensionReload);
     }
@@ -148,13 +414,13 @@ function renderPopupUI() {
     newPauseToggle.addEventListener("change", handlePauseToggle);
 
     emoticonEdit.addEventListener("click", async () => {
-      // 현재 활성화된 탭 정보를 가져옵니다.
+      // 현재 활성화된 탭 정보를 가져옴
       const [tab] = await chrome.tabs.query({
         active: true,
         currentWindow: true,
       });
 
-      // 현재 탭이 치지직인지 확인합니다.
+      // 현재 탭이 치지직인지 확인
       const isChzzkTab = tab?.url?.startsWith("https://chzzk.naver.com/");
       if (!isChzzkTab) {
         emoticonListContainer.innerHTML =
@@ -169,7 +435,27 @@ function renderPopupUI() {
       }
     });
 
-    refreshBtn.addEventListener("click", saveRefreshOrder);
+    refreshBtn.addEventListener("click", async () => {
+      // 현재 활성화된 탭 정보를 가져옴
+      const [tab] = await chrome.tabs.query({
+        active: true,
+        currentWindow: true,
+      });
+
+      // 현재 탭이 치지직인지 확인
+      const isChzzkTab = tab?.url?.startsWith("https://chzzk.naver.com/");
+      if (!isChzzkTab) {
+        refreshBtn.disabled = true;
+        emoticonListContainer.innerHTML =
+          '<p class="edit-unavailable-message">치지직 탭에서 편집할 수 있어요!</p>';
+        if (emoticonListContainer.classList.contains("hidden"))
+          emoticonListContainer.classList.toggle("hidden");
+        return;
+      }
+
+      saveRefreshOrder();
+    });
+    applyTooltip();
   });
 
   // --- 최대 개수 UI 바인딩 ---
@@ -222,7 +508,6 @@ function renderPopupUI() {
 function requestMaxConfirm() {
   reloadModal(`최근 이모티콘 개수를 <br>업데이트 합니다.`, 130);
   setTimeout(() => {
-    // chrome.runtime.sendMessage({ type: "REQUEST_SOFT_REAPPLY" });
     window.close();
   }, 1000);
 }
@@ -360,7 +645,7 @@ function saveRefreshOrder() {
   const newOrder = [];
   availableEmojis.forEach((item) => {
     // 각 아이템의 data-id를 순서대로 배열에 추가
-    newOrder.push(`${item.id}`);
+    newOrder.push(`emoji_pack_id_${item.id}`);
   });
 
   // 새로운 순서 배열을 저장
@@ -442,12 +727,11 @@ function handlePauseToggle(event) {
       ? `기능을 ${actionText}하려면 열려있는 모든 치지직 페이지를 새로고침해야 합니다.\n\n계속 진행하시겠습니까?`
       : `치모티콘 정리를 ${actionText}하시겠습니까?`;
 
-  modalContents.style.height = `${window.innerHeight - 20}px`;
   // 모달 내용 설정
   modalContentText.innerText = modalInnetText;
 
   // 모달을 화면에 표시
-  modalWrapper.style.display = "block";
+  modalWrapper.style.display = "flex";
 
   // .onclick을 사용하여 이벤트 리스너가 중복되지 않도록 함
 
