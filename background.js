@@ -195,22 +195,6 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     return true; // sendResponse를 비동기적으로 사용하기 위해 true를 반환
   }
 
-  if (request.type === "GET_LOG_POWER_BALANCES") {
-    (async () => {
-      try {
-        const res = await fetch(
-          "https://api.chzzk.naver.com/service/v1/log-power/balances"
-        );
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const json = await res.json();
-        sendResponse({ success: true, data: json });
-      } catch (e) {
-        sendResponse({ success: false, error: String(e) });
-      }
-    })();
-    return true; // 비동기 응답
-  }
-
   if (request.type === "MANUAL_RELOAD_REQUEST") {
     // 비동기 함수로 감싸서 await을 사용
     (async () => {

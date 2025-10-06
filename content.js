@@ -580,7 +580,6 @@ function installChatEmojiFilter(root) {
       // 1. 이모티콘들을 담고 있는 부모 컨테이너를 찾음
       const container = document.querySelector(".flicking-camera");
       if (!container) {
-        console.error("Can't find '.flicking-camera' container.");
         return;
       }
 

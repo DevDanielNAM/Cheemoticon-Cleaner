@@ -17,16 +17,11 @@
       "matches": ["https://chzzk.naver.com/*"],
       "js": ["content.js"],
       "css": ["style.css"]
-    },
-    {
-      "matches": ["https://game.naver.com/profile*"],
-      "js": ["profile-power.js"]
     }
   ],
   "host_permissions": [
     "https://chzzk.naver.com/*",
-    "https://api.chzzk.naver.com/*",
-    "https://game.naver.com/*"
+    "https://api.chzzk.naver.com/*"
   ],
   "action": {
     "default_title": "치모티콘 정리",
