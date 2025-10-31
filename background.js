@@ -89,32 +89,6 @@ async function softReapplyToChzzkTabs() {
  * 메시지 수신 리스너
  */
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  // if (request.type === "GET_EMOJI_PACKS") {
-  //   const { userStatusIdHash } = request;
-  //   if (!userStatusIdHash) {
-  //     sendResponse({ success: false, error: "userStatusIdHash is missing" });
-  //     return; // 동기 응답
-  //   }
-
-  //   // 비동기 API 호출
-  //   (async () => {
-  //     try {
-  //       const response = await fetch(
-  //         `https://api.chzzk.naver.com/service/v1/channels/${userStatusIdHash}/emoji-packs`
-  //       );
-  //       if (!response.ok) {
-  //         throw new Error(`API call failed with status: ${response.status}`);
-  //       }
-  //       const data = await response.json();
-  //       sendResponse({ success: true, data: data.content });
-  //     } catch (error) {
-  //       sendResponse({ success: false, error: error.message });
-  //     }
-  //   })();
-
-  //   return true; // sendResponse를 비동기적으로 사용하기 위해 true를 반환
-  // }
-
   if (request.type === "GET_EMOJI_PACKS") {
     const { userStatusIdHash } = request;
     if (!userStatusIdHash) {
@@ -127,19 +101,26 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         const cacheKey = `emoji_cache_${userStatusIdHash}`;
         const expiryKey = `emoji_expiry_${userStatusIdHash}`;
 
-        // 1. 로컬 스토리지에서 캐시와 만료 시간을 가져옵니다.
+        // 1. 로컬 스토리지에서 캐시와 만료 시간을 가져옴
         const { [cacheKey]: cachedData, [expiryKey]: expiryTimestamp } =
           await chrome.storage.local.get([cacheKey, expiryKey]);
 
-        // 2. 캐시가 유효한지 확인합니다. (캐시가 존재하고, 만료 시간이 지나지 않았을 경우)
-        if (cachedData && expiryTimestamp && Date.now() < expiryTimestamp) {
-          // 캐시가 유효하면 캐시된 데이터를 즉시 반환합니다.
+        // 2. 캐시가 유효한지 확인 (캐시가 존재하고, 만료 시간이 지나지 않았을 경우)
+        // request.forceRefresh 플래그가 없는 경우에만 캐시를 사용
+        const useCache =
+          !request.forceRefresh &&
+          cachedData &&
+          expiryTimestamp &&
+          Date.now() < expiryTimestamp;
+
+        if (useCache) {
+          // 캐시가 유효하면 캐시된 데이터를 즉시 반환
           sendResponse({ success: true, data: cachedData, fromCache: true });
           return;
         }
 
-        // 3. 캐시가 없거나 만료된 경우, API를 호출하여 새로운 데이터를 가져옵니다.
-        // 두 API를 병렬로 호출하여 성능을 최적화합니다.
+        // 3. 캐시가 없거나 만료된 경우, API를 호출하여 새로운 데이터를 가져옴
+        // 두 API를 병렬로 호출하여 성능을 최적화
         const [emojiPacksResponse, subscriptionResponse] = await Promise.all([
           fetch(
             `https://api.chzzk.naver.com/service/v1/channels/${userStatusIdHash}/emoji-packs`
@@ -172,20 +153,20 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
           }
         }
 
-        // 4. 새로운 만료 시간을 설정합니다.
+        // 4. 새로운 만료 시간을 설정
         // 구독 정보에서 가장 빠른 만료 시간을 사용하되,
-        // 구독이 없거나 날짜 정보가 없는 경우 기본값으로 24시간 후로 설정합니다.
+        // 구독이 없거나 날짜 정보가 없는 경우 기본값으로 24시간 후로 설정
         const nextExpiry = isFinite(earliestExpiry)
           ? earliestExpiry
           : Date.now() + 24 * 60 * 60 * 1000; // 24시간
 
-        // 5. 새로운 데이터와 만료 시간을 스토리지에 저장합니다.
+        // 5. 새로운 데이터와 만료 시간을 스토리지에 저장
         await chrome.storage.local.set({
           [cacheKey]: emojiContent,
           [expiryKey]: nextExpiry,
         });
 
-        // 가져온 새 데이터를 클라이언트에게 전송합니다.
+        // 가져온 새 데이터를 클라이언트에게 전송
         sendResponse({ success: true, data: emojiContent, fromCache: false });
       } catch (error) {
         sendResponse({ success: false, error: error.message });

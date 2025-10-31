@@ -44,6 +44,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       chrome.runtime.sendMessage({
         type: "GET_EMOJI_PACKS",
         userStatusIdHash: userStatusIdHash,
+        forceRefresh: true,
       }),
       chrome.storage.local.get("emoticonOrder"),
     ]);
