@@ -11,6 +11,16 @@ if (!window.__cheemo_initialized__) {
         "[class*=live_chatting_list_container__],[class*=vod_chatting_list__]"
       );
       if (root) installChatEmojiFilter(root);
+
+      // 이모티콘 크기 조절 기능 다시 켜기
+      (async () => {
+        // 1. 저장된 크기를 다시 읽어옴
+        const { chzzkEmojiSize = 32 } = await safeLocalGet("chzzkEmojiSize");
+        __cheemo_sizePx = chzzkEmojiSize;
+        // 2. 컨테이너 옵저버를 다시 연결하고, 그리드를 즉시 재계산
+        ensureContainerObserver();
+      })();
+
       // 이모티콘 관련 UI/옵저버 기능(최근/툴팁/리사이즈 등)도 켜기
       if (!window.myEmoticonExtensionInstance && window.EmoticonExtension) {
         window.myEmoticonExtensionInstance = new window.EmoticonExtension();
@@ -48,6 +58,24 @@ if (!window.__cheemo_initialized__) {
             btn.style.display = "";
           });
       }
+      // 이모티콘 크기 스타일(CSS) 엘리먼트 제거
+      if (window.__cheemo_styleEl) {
+        window.__cheemo_styleEl.remove();
+        window.__cheemo_styleEl = null;
+      }
+      // 그리드 크기 조절 옵저버 중지
+      if (window.__cheemo_resize_observer) {
+        try {
+          window.__cheemo_resize_observer.disconnect();
+        } catch (e) {}
+        window.__cheemo_resize_observer = null;
+      }
+      if (window.__cheemo_container_observer) {
+        try {
+          window.__cheemo_container_observer.disconnect();
+        } catch (e) {}
+        window.__cheemo_container_observer = null;
+      }
       if (window.myEmoticonExtensionInstance) {
         window.myEmoticonExtensionInstance.cleanup?.();
         window.myEmoticonExtensionInstance = null;
@@ -67,6 +95,13 @@ if (!window.__cheemo_initialized__) {
 
       case "CHEEMO_ENABLE":
         setEnabled(true);
+
+        // 'OFF' 또는 '설치' 배너가 혹시 남아있다면 제거
+        const banner = document.getElementById(
+          "chzzk-cheemo-ext-update-banner"
+        );
+        if (banner) banner.remove();
+
         sendResponse({ ok: true, enabled: true });
         return;
 
@@ -268,8 +303,6 @@ function ensureContainerObserver() {
     if (container) {
       // 컨테이너가 나타나는 즉시 현재 크기로 재계산
       recomputeGrid(__cheemo_sizePx);
-      // 계속 감시할 필요 없으면 다음 줄 주석 해제해 끊어도 됨
-      // __cheemo_container_observer.disconnect(); __cheemo_container_observer = null;
     }
   });
   __cheemo_container_observer.observe(document.body, {
@@ -420,6 +453,10 @@ function installChatEmojiFilter(root) {
       document.removeEventListener("keydown", this.handleEmoticonShortcut);
       document.removeEventListener("keydown", this.handleEscapeKey);
       document.removeEventListener("keydown", this.handleInputShortcut);
+      document.body.removeEventListener(
+        "mousedown",
+        this.handleResizeMouseDown
+      );
     }
 
     /**
@@ -431,6 +468,7 @@ function installChatEmojiFilter(root) {
       this.handleEmoticonShortcut = this.handleEmoticonShortcut.bind(this);
       this.handleEscapeKey = this.handleEscapeKey.bind(this);
       this.handleInputShortcut = this.handleInputShortcut.bind(this);
+      this.handleResizeMouseDown = this.handleResizeMouseDown.bind(this);
       this.injectAndCommunicate();
 
       chrome.storage.local.get("isDeletionLocked", (data) => {
@@ -1086,82 +1124,87 @@ function installChatEmojiFilter(root) {
      */
     initializeResizeHandler() {
       // mousedown 이벤트는 한번만 등록하기 위해 document에 위임(event delegation)
-      document.body.addEventListener("mousedown", (e) => {
-        // 클릭된 대상이 팝업 헤더가 아니면 무시
-        const handle = e.target.closest(
-          '#aside-chatting [class*="popup_header"]'
-        );
-        if (!handle) return;
+      document.body.addEventListener("mousedown", this.handleResizeMouseDown);
+    }
 
-        // 리사이즈할 대상인 팝업 컨테이너를 찾음
-        const popupContainer = handle.closest(
-          '#aside-chatting [class*="popup_container"]'
-        );
-        if (!popupContainer) return;
+    /**
+     * 리사이즈 mousedown 이벤트 핸들러
+     */
+    handleResizeMouseDown(e) {
+      // 클릭된 대상이 팝업 헤더가 아니면 무시
+      const handle = e.target.closest(
+        '#aside-chatting [class*="popup_header"]'
+      );
+      if (!handle) return;
 
-        e.preventDefault();
+      // 리사이즈할 대상인 팝업 컨테이너를 찾음
+      const popupContainer = handle.closest(
+        '#aside-chatting [class*="popup_container"]'
+      );
+      if (!popupContainer) return;
 
-        // 드래그를 시작하면 부드러운 효과를 즉시 제거하여 지연 현상을 없앰
-        popupContainer.classList.remove("smooth-transition");
+      e.preventDefault();
 
-        this.isResizing = true;
+      // 드래그를 시작하면 부드러운 효과를 즉시 제거하여 지연 현상을 없앰
+      popupContainer.classList.remove("smooth-transition");
 
-        // 리사이즈 시작 시점의 마우스 Y좌표와 컨테이너의 높이를 저장
-        const startY = e.pageY;
-        const startHeight = popupContainer.offsetHeight;
+      this.isResizing = true;
 
-        // body에 'resizing' 클래스를 추가하여 텍스트 선택 방지
-        document.body.classList.add("resizing");
+      // 리사이즈 시작 시점의 마우스 Y좌표와 컨테이너의 높이를 저장
+      const startY = e.pageY;
+      const startHeight = popupContainer.offsetHeight;
 
-        // --- 마우스 이동(mousemove) 이벤트 핸들러 ---
-        const doDrag = (e) => {
-          // 시작 지점으로부터의 마우스 이동 거리 계산
-          const deltaY = startY - e.pageY;
-          // 새로운 높이 계산
-          let newHeight = startHeight + deltaY;
+      // body에 'resizing' 클래스를 추가하여 텍스트 선택 방지
+      document.body.classList.add("resizing");
 
-          // 최소/최대 높이 제한
-          if (newHeight < 150) newHeight = 150; // 최소 높이 150px
-          if (newHeight > 700) newHeight = 700; // 최대 높이 700px
+      // --- 마우스 이동(mousemove) 이벤트 핸들러 ---
+      const doDrag = (e) => {
+        // 시작 지점으로부터의 마우스 이동 거리 계산
+        const deltaY = startY - e.pageY;
+        // 새로운 높이 계산
+        let newHeight = startHeight + deltaY;
 
-          // 컨테이너에 새로운 높이 적용
-          popupContainer.style.height = `${newHeight}px`;
-        };
+        // 최소/최대 높이 제한
+        if (newHeight < 150) newHeight = 150; // 최소 높이 150px
+        if (newHeight > 700) newHeight = 700; // 최대 높이 700px
 
-        // --- 마우스 버튼 놓기(mouseup) 이벤트 핸들러 ---
-        const stopDrag = () => {
-          // body에서 'resizing' 클래스 제거
-          document.body.classList.remove("resizing");
-          // 이벤트 리스너 정리
-          document.removeEventListener("mousemove", doDrag);
-          document.removeEventListener("mouseup", stopDrag);
+        // 컨테이너에 새로운 높이 적용
+        popupContainer.style.height = `${newHeight}px`;
+      };
 
-          // 드래그를 마치면, 다음 활성화 애니메이션을 위해 부드러운 효과를 다시 켤 준비
-          popupContainer.classList.add("smooth-transition");
+      // --- 마우스 버튼 놓기(mouseup) 이벤트 핸들러 ---
+      const stopDrag = () => {
+        // body에서 'resizing' 클래스 제거
+        document.body.classList.remove("resizing");
+        // 이벤트 리스너 정리
+        document.removeEventListener("mousemove", doDrag);
+        document.removeEventListener("mouseup", stopDrag);
 
-          this.isResizing = false;
+        // 드래그를 마치면, 다음 활성화 애니메이션을 위해 부드러운 효과를 다시 켤 준비
+        popupContainer.classList.add("smooth-transition");
 
-          // *** 컨텍스트 유효성 검사 ***
-          if (
-            typeof chrome === "undefined" ||
-            !chrome.runtime ||
-            !chrome.runtime.id
-          ) {
-            return;
-          }
+        this.isResizing = false;
 
-          // 최종 높이를 chrome.storage에 저장
-          const finalHeight = popupContainer.offsetHeight;
+        // *** 컨텍스트 유효성 검사 ***
+        if (
+          typeof chrome === "undefined" ||
+          !chrome.runtime ||
+          !chrome.runtime.id
+        ) {
+          return;
+        }
 
-          if (!CONTEXT_ALIVE || !chrome?.runtime?.id) return;
-          safeLocalSet({ chzzkEmoticonPopupHeight: finalHeight });
-        };
+        // 최종 높이를 chrome.storage에 저장
+        const finalHeight = popupContainer.offsetHeight;
 
-        // document에 mousemove와 mouseup 이벤트 리스너를 등록하여
-        // 마우스가 헤더 밖으로 나가도 리사이즈가 계속되도록 함
-        document.addEventListener("mousemove", doDrag);
-        document.addEventListener("mouseup", stopDrag);
-      });
+        if (!CONTEXT_ALIVE || !chrome?.runtime?.id) return;
+        safeLocalSet({ chzzkEmoticonPopupHeight: finalHeight });
+      };
+
+      // document에 mousemove와 mouseup 이벤트 리스너를 등록하여
+      // 마우스가 헤더 밖으로 나가도 리사이즈가 계속되도록 함
+      document.addEventListener("mousemove", doDrag);
+      document.addEventListener("mouseup", stopDrag);
     }
 
     /**

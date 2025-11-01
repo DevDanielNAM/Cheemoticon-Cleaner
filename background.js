@@ -191,6 +191,16 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     return true;
   }
 
+  // 'OFF' 시 배너 표시를 요청하는 새 메시지
+  if (request.type === "SHOW_DISABLE_BANNER") {
+    const disableMessage =
+      "치모티콘 정리가 OFF되었습니다. 적용된 스타일을 완전히 제거하려면 새로고침이 필요합니다.";
+
+    // 이전에 정의한 notifyExistingTabs 함수를 호출
+    notifyExistingTabs(disableMessage);
+    return true; // 비동기 작업(notifyExistingTabs)이 있으므로
+  }
+
   // '업데이트 적용' 또는 'ON' 시 소프트 재주입을 요청하는 메시지
   if (request.type === "REQUEST_SOFT_REAPPLY") {
     softReapplyToChzzkTabs();
@@ -200,9 +210,110 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   // 기존 NEW_VERSION_LOADED는 배지 제거 역할만 하도록 분리
   if (request.type === "CLEAR_UPDATE_BADGE") {
     chrome.action.setBadgeText({ text: "" });
+    sendResponse({ ok: true });
     return;
   }
 });
+
+/**
+ * 1. 페이지에 배너를 삽입하고 실행하는 함수 (브라우저 컨텍스트가 아닌,
+ * 페이지 컨텍스트에서 실행되도록 chrome.scripting.executeScript로 주입)
+ */
+function showNotificationBanner(messageText) {
+  // 이미 배너가 있다면 중복 생성 방지
+  if (document.getElementById("chzzk-cheemo-ext-update-banner")) {
+    return;
+  }
+
+  const banner = document.createElement("div");
+  banner.id = "chzzk-cheemo-ext-update-banner";
+  banner.style.cssText = `
+    display: flex;
+    align-items: center;
+    justify-content: space-around;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    background-color: #772ce8;
+    color: white;
+    text-align: center;
+    padding: 12px;
+    font-size: 14px;
+    z-index: 99999;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    transition: transform 0.35s cubic-bezier(.57,-0.15,.37,1.31), opacity 0.35s cubic-bezier(.57,-0.15,.37,1.31);
+  `;
+
+  const wrapper = document.createElement("div");
+  wrapper.style.cssText = `
+    width: 98%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 15px;
+  `;
+
+  const message = document.createElement("span");
+  message.textContent = messageText; // 인자로 받은 메시지 사용
+
+  const refreshButton = document.createElement("button");
+  refreshButton.textContent = "새로고침";
+  refreshButton.style.cssText = `
+    background-color: #00ffa3;
+    color: #121212;
+    border: none;
+    border-radius: 4px;
+    padding: 4px 10px;
+    font-weight: bold;
+    cursor: pointer;
+  `;
+  refreshButton.onclick = () => {
+    banner.style.transform = "translateY(-50px)";
+    banner.style.opacity = "0";
+    setTimeout(() => location.reload(), 200);
+  };
+
+  wrapper.append(message, refreshButton);
+
+  const closeButton = document.createElement("span");
+  closeButton.textContent = "×";
+  closeButton.style.cssText = `
+    cursor: pointer;
+    font-size: 20px;
+    font-weight: bold;
+  `;
+  closeButton.onclick = () => {
+    banner.style.transform = "translateY(-50px)";
+    banner.style.opacity = "0";
+    setTimeout(() => banner.remove(), 350);
+  };
+
+  banner.append(wrapper, closeButton);
+  document.body.appendChild(banner);
+}
+
+/**
+ * 2. 이미 열려있는 치지직 탭에 배너 삽입을 명령하는 함수
+ */
+async function notifyExistingTabs(message) {
+  const targetUrl = "https://chzzk.naver.com/*";
+  const tabs = await chrome.tabs.query({ url: targetUrl });
+
+  for (const tab of tabs) {
+    try {
+      await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        func: showNotificationBanner, // 위에서 정의한 배너 함수
+        args: [message], // 배너 함수에 전달할 메시지
+      });
+    } catch (e) {
+      console.error(`Tab ${tab.id}에 배너 주입 실패:`, e);
+      // 'scripting' 권한이 없거나
+      // 특수한 페이지(예: 오류 페이지)일 경우 실패할 수 있음
+    }
+  }
+}
 
 /**
  * 1. 설치 또는 업데이트 시 실행
@@ -217,9 +328,11 @@ chrome.runtime.onInstalled.addListener(async (details) => {
     return;
   }
 
-  // 처음 설치 시 자동 새로고침
+  // 처음 설치 시: 배너 알림
   if (details.reason === "install") {
-    reloadChzzkTabs();
+    const installMessage =
+      "치모티콘 정리가 설치되었습니다. 기능을 적용하려면 페이지를 새로고침해주세요.";
+    notifyExistingTabs(installMessage);
   }
 
   // 업데이트 시에는 배지만 표시하고, 임시 플래그를 설정

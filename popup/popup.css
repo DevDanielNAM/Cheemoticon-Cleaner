@@ -398,7 +398,7 @@ body.grabbing .emoticon-item {
   align-items: center;
   justify-content: center;
   position: absolute;
-  left: 12px;
+  left: 10px;
   width: 95%;
   height: 45px;
   padding: 10px;
@@ -414,8 +414,7 @@ body.grabbing .emoticon-item {
 
 #update-notice:hover {
   cursor: pointer;
-  scale: 1.02;
-  box-shadow: 0 0 7px 0px #e00000b3;
+  box-shadow: 0 3px 7px 0px #e00000b3;
 }
 
 /* 제어 버튼 전체 컨테이너 */

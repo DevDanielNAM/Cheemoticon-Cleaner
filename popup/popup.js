@@ -412,7 +412,10 @@ function renderPopupUI() {
     }
 
     // --- 4. 일시정지 토글의 'change' 이벤트 리스너를 설정 ---
-    newPauseToggle.addEventListener("change", handlePauseToggle);
+    newPauseToggle.addEventListener("change", (event) => {
+      const isPaused = !event.target.checked;
+      applyPauseToggle(isPaused);
+    });
 
     emoticonEdit.addEventListener("click", async () => {
       // 현재 활성화된 탭 정보를 가져옴
@@ -659,21 +662,21 @@ function saveRefreshOrder() {
  * '업데이트 적용' 버튼 클릭 시 실행될 함수
  */
 function applyUpdateAndReloadTabs() {
-  chrome.storage.local.get("isPaused", (data) => {
-    if (data.isPaused) {
-      chrome.storage.local.set({ isPaused: false });
-    }
-  });
-
   reloadModal(`치모티콘 정리를 <br>업데이트 합니다.`, 140);
 
-  setTimeout(() => {
+  setTimeout(async () => {
     chrome.storage.local.set({ updateNeeded: false });
     // 2. 백그라운드에 '소프트 재적용'을 요청
     chrome.runtime.sendMessage({ type: "REQUEST_SOFT_REAPPLY" });
 
-    // 3. 백그라운드에 '배지 제거'를 요청
-    chrome.runtime.sendMessage({ type: "CLEAR_UPDATE_BADGE" });
+    // 3. 백그라운드에 '배지 제거'를 요청하고 응답을 'await'
+    try {
+      await chrome.runtime.sendMessage({ type: "CLEAR_UPDATE_BADGE" });
+    } catch (e) {
+      // 메시지 전송에 실패해도 팝업은 닫히도록 예외 처리
+      console.warn("배지 제거 메시지 전송 실패:", e);
+    }
+
     window.close();
   }, 1000);
 }
@@ -710,53 +713,7 @@ function reloadModal(msg, posY) {
 }
 
 /**
- * '일시정지' 토글 스위치 상태 변경 시 모달을 띄우는 함수
- * @param {Event} event - 토글 스위치의 change 이벤트 객체
- */
-function handlePauseToggle(event) {
-  const isPaused = !event.target.checked;
-  const actionText = isPaused ? "OFF" : "ON";
-
-  const modalWrapper = document.getElementById("modal-wrapper");
-  const modalContents = document.getElementById("modal-contents");
-  const modalContentText = document.getElementById("modal-content-text");
-  const modalCancelButton = document.querySelector(".modal-cancel-button");
-  const modalConfirmButton = document.querySelector(".modal-confirm-button");
-
-  const modalInnetText =
-    actionText === "OFF"
-      ? `기능을 ${actionText}하려면 열려있는 모든 치지직 페이지를 새로고침해야 합니다.\n\n계속 진행하시겠습니까?`
-      : `치모티콘 정리를 ${actionText}하시겠습니까?`;
-
-  // 모달 내용 설정
-  modalContentText.innerText = modalInnetText;
-
-  // 모달을 화면에 표시
-  modalWrapper.style.display = "flex";
-
-  // .onclick을 사용하여 이벤트 리스너가 중복되지 않도록 함
-
-  // 확인 버튼 클릭 시
-  modalConfirmButton.onclick = () => {
-    // 모달을 먼저 숨김
-    modalWrapper.style.display = "none";
-
-    // 실제 기능 실행
-    applyPauseToggle(isPaused);
-  };
-
-  // 취소 버튼 클릭 시
-  modalCancelButton.onclick = () => {
-    // 모달을 숨김
-    modalWrapper.style.display = "none";
-
-    // 토글 스위치를 원래 상태로 되돌림
-    event.target.checked = !event.target.checked;
-  };
-}
-
-/**
- * 모달의 '확인'을 눌렀을 때 실제 토글 기능을 적용하는 함수
+ * 토글 기능을 적용하는 함수
  * @param {boolean} isPaused - 일시정지 여부
  */
 function applyPauseToggle(isPaused) {
@@ -770,19 +727,32 @@ function applyPauseToggle(isPaused) {
       { isPaused: isPaused, updateNeeded: false },
       () => {
         if (isPaused) {
-          // 0ff - 페이지 새로고침
-          setTimeout(() => {
-            chrome.tabs.query({ url: "https://chzzk.naver.com/*" }, (tabs) => {
-              tabs.forEach((tab) => chrome.tabs.reload(tab.id));
-            });
-            window.close();
-          }, 550);
+          // 0ff
+          // 1. 모든 치지직 탭을 쿼리
+          chrome.tabs.query(
+            { url: "https://chzzk.naver.com/*" },
+            async (tabs) => {
+              // 2. 각 탭의 JS 기능을 즉시 비활성화
+              for (const tab of tabs) {
+                try {
+                  // toggleCheemo는 content.js가 준비되었는지 확인하므로 안전함
+                  await toggleCheemo(tab.id, false); // false = disable
+                } catch (e) {
+                  console.warn(`Tab ${tab.id}에 비활성화 메시지 전송 실패:`, e);
+                }
+              }
+
+              // 3. background.js에 배너 표시 요청
+              chrome.runtime.sendMessage({ type: "SHOW_DISABLE_BANNER" });
+
+              // 4. 팝업 닫기
+              window.close();
+            }
+          );
         } else {
           // on - soft 재주입
-          setTimeout(() => {
-            chrome.runtime.sendMessage({ type: "REQUEST_SOFT_REAPPLY" });
-            window.close();
-          }, 550);
+          chrome.runtime.sendMessage({ type: "REQUEST_SOFT_REAPPLY" });
+          window.close();
         }
         // 팝업 UI 재렌더링
         renderPopupUI();
