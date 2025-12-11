@@ -355,6 +355,31 @@ function updateEmojiVisibility(imgEl) {
   }
 }
 
+// disabled 속성을 제거하고 포인터 이벤트를 활성화하는 헬퍼 함수
+function unlockDisabledButtons(baseNode) {
+  if (!baseNode) return;
+
+  // baseNode가 직접 버튼인 경우
+  if (baseNode.matches && baseNode.matches("button[disabled]")) {
+    baseNode.removeAttribute("disabled");
+    baseNode.style.pointerEvents = "auto";
+    baseNode.style.cursor = "pointer";
+  }
+
+  // baseNode 내부의 버튼들 탐색
+  if (baseNode.querySelectorAll) {
+    baseNode
+      .querySelectorAll(
+        "button[disabled][class*='live_chatting_message_button__']"
+      )
+      .forEach((btn) => {
+        btn.removeAttribute("disabled");
+        btn.style.pointerEvents = "auto";
+        btn.style.cursor = "pointer";
+      });
+  }
+}
+
 // 채팅 컨테이너에 옵저버/위임
 function installChatEmojiFilter(root) {
   if (!root) return;
@@ -409,6 +434,8 @@ function installChatEmojiFilter(root) {
     for (const m of muts) {
       (m.addedNodes || []).forEach((node) => {
         if (!(node instanceof HTMLElement)) return;
+
+        unlockDisabledButtons(node);
 
         if (
           node.matches(
