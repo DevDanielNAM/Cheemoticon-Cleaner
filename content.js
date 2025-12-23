@@ -834,47 +834,72 @@ function installChatEmojiFilter(root) {
       );
       if (recentEmoticons.length === 0) return false;
 
+      // 1. 유효한 이모티콘 ID Set을 만드는 헬퍼 함수
+      const getAvailableEmojiIds = (data) => {
+        const ids = new Set();
+        const { emojiPacks, cheatKeyEmojiPacks, subscriptionEmojiPacks } = data;
+        [emojiPacks, cheatKeyEmojiPacks, subscriptionEmojiPacks].forEach(
+          (packs) => {
+            if (packs) {
+              packs.forEach((pack) => {
+                if (!pack.emojiPackLocked) {
+                  pack.emojis.forEach((emoji) => ids.add(emoji.emojiId));
+                }
+              });
+            }
+          }
+        );
+        return ids;
+      };
+
       try {
-        const response = await chrome.runtime.sendMessage({
+        // 1차 시도: 캐시된 데이터(기본)로 확인
+        let response = await chrome.runtime.sendMessage({
           type: "GET_EMOJI_PACKS",
           userStatusIdHash,
         });
 
         if (!response || !response.success) {
-          if (chrome.runtime.lastError)
-            console.warn(
-              "Communication channel closed:",
-              chrome.runtime.lastError.message
-            );
-          else console.error("Failed to get emoji packs:", response?.error);
-          return false;
+          return false; // 통신 실패 시 삭제 작업 중단
         }
 
-        const availableEmojiIds = new Set();
-        const { emojiPacks, cheatKeyEmojiPacks, subscriptionEmojiPacks } =
-          response.data;
-        [emojiPacks, cheatKeyEmojiPacks, subscriptionEmojiPacks].forEach(
-          (packs) => {
-            if (packs)
-              packs.forEach((pack) => {
-                if (!pack.emojiPackLocked)
-                  pack.emojis.forEach((emoji) =>
-                    availableEmojiIds.add(emoji.emojiId)
-                  );
-              });
-          }
+        let availableEmojiIds = getAvailableEmojiIds(response.data);
+
+        // 현재 로컬 목록 중 "유효하지 않다고 판단된" 이모티콘 식별
+        let invalidEmoticons = recentEmoticons.filter(
+          (e) => !availableEmojiIds.has(e.emojiId)
         );
 
+        // 2차 시도: 만약 지워야 할 이모티콘이 있다면, 캐시가 낡아서 그럴 수 있으니 강제 갱신 요청
+        if (invalidEmoticons.length > 0) {
+          // forceRefresh: true를 보내서 최신 데이터를 받아옴
+          response = await chrome.runtime.sendMessage({
+            type: "GET_EMOJI_PACKS",
+            userStatusIdHash,
+            forceRefresh: true,
+          });
+
+          if (response && response.success) {
+            // 최신 데이터로 ID 목록 갱신
+            availableEmojiIds = getAvailableEmojiIds(response.data);
+          }
+        }
+
+        // 최종 필터링: 최신 데이터 기준으로 다시 확인
         const cleanedEmoticons = recentEmoticons.filter((e) =>
           availableEmojiIds.has(e.emojiId)
         );
 
+        // 변경사항이 있을 때만 저장
         if (cleanedEmoticons.length !== recentEmoticons.length) {
           localStorage.setItem(emoticonsKey, JSON.stringify(cleanedEmoticons));
           return true;
         }
       } catch (error) {
-        if (error.message.includes("Extension context invalidated")) {
+        if (
+          error.message &&
+          error.message.includes("Extension context invalidated")
+        ) {
           console.warn("Context invalidated as expected.");
         } else {
           console.error("Error removing expired emoticons:", error);
