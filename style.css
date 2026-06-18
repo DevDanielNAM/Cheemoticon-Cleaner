@@ -89,7 +89,8 @@
   line-height: 20px;
 }
 
-#aside-chatting [class*="popup_header"] {
+#aside-chatting [class*="popup_header"],
+[role="alertdialog"] [class*="_header_"] {
   cursor: ns-resize;
   user-select: none; /* 헤더의 텍스트가 드래그되지 않도록 설정 */
 }
@@ -100,12 +101,14 @@ body.resizing * {
   user-select: none !important;
 }
 
-#aside-chatting [class*="popup_container"].smooth-transition {
+#aside-chatting [class*="popup_container"].smooth-transition,
+[role="alertdialog"][aria-modal="true"].smooth-transition {
   transition: height 0.3s ease-in-out;
 }
 
 /* 툴팁을 감쌀 컨테이너 스타일 */
-#aside-chatting [class*="button_container"][aria-haspopup="true"] {
+#aside-chatting [class*="button_container"][aria-haspopup="true"],
+#aside-chatting [class*="_input_button_"][aria-haspopup="true"] {
   position: relative !important;
 }
 
@@ -136,6 +139,9 @@ body.resizing * {
 /* 컨테이너에 마우스를 올렸을 때 툴팁 텍스트를 보이게 함 */
 #aside-chatting
   [class*="button_container"][aria-haspopup="true"]:hover
+  .tooltip-text,
+#aside-chatting
+  [class*="_input_button_"][aria-haspopup="true"]:hover
   .tooltip-text {
   visibility: visible;
   opacity: 1;

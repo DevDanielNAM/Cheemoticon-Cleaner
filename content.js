@@ -1,3 +1,63 @@
+/**
+ * 치지직 DOM 셀렉터 모음.
+ * 치지직이 업데이트될 때마다 클래스명(예: live_chatting_message_button__ →
+ * _button_1s877_18)이 바뀌므로, 한 곳에서 구/신 클래스명을 함께(OR) 관리한다.
+ * 새 빌드의 해시 접미사(1s877, 10ysp 등)는 또 바뀔 수 있으므로, 가능한 한
+ * id / aria 속성 / 구조처럼 안정적인 앵커를 우선 사용한다.
+ */
+window.CHEEMO_SEL = window.CHEEMO_SEL || {
+  // 채팅 목록(스크롤) 루트 컨테이너
+  // 새 빌드: <div class="_container_sg7hy_1" role="log"> > ._wrapper_sg7hy_25
+  //         > ._item_sg7hy_7(채팅 한 줄)
+  chatRoot:
+    "[class*=live_chatting_list_container__],[class*=vod_chatting_list__]," +
+    '[role="log"]',
+  // 이모티콘 하나를 감싸는 버튼/요소 (숨김·복원의 최소 단위)
+  // 새 빌드에서는 이모티콘이 <span class="_text_"><button class="_button_">
+  // <img></button></span> 구조라 per-이모티콘 버튼(_button_)을 잡아야 한다.
+  messageEmojiHolder:
+    "[class*=live_chatting_message_button__]," +
+    "[class*=live_chatting_scroll_message__]," +
+    "[class*='_chatting_message_'] [class*='_button_']",
+  // 채팅 메시지 컨테이너 (이미지 스캔 범위 / 차단 대상 판별용)
+  messageContainer:
+    "[class*=live_chatting_message_text__]," +
+    "[class*=live_chatting_scroll_message__]," +
+    "[class*=_chatting_message_]",
+  // 채팅 메시지 안의 이모티콘 이미지 (alt+클릭 차단 대상)
+  messageEmojiImg:
+    "[class*=live_chatting_message_text__] img," +
+    "[class*=live_chatting_scroll_message__] img," +
+    "[class*=_chatting_message_] img",
+  // 비활성화된 이모티콘 버튼(잠긴 구독 이모티콘 등) - disabled 해제 대상
+  disabledMessageButton:
+    "button[disabled][class*='live_chatting_message_button__']," +
+    "button[disabled][class*='_button_']",
+  // 이모티콘 팝업의 카테고리 목록(가로 스크롤) 카메라
+  flickingCamera: ".flicking-camera",
+  // 카테고리 한 칸(이모티콘 팩 아이콘)
+  flickingItem: "[class*='emoticon_flicking_item__'],[class*='_flicking_item_']",
+  // 이모티콘 그리드(리스트) 컨테이너 - 크기/그리드 조절 대상
+  emojiList: "[class*=emoticon_list__],#emoji_area ul",
+  // 이모티콘 팝업 컨테이너 (높이 리사이즈 대상)
+  // 새 빌드: <div class="_container_ _emoticon_" role="alertdialog"> 형태.
+  popupContainer:
+    '[class*="popup_container"],' +
+    '[role="alertdialog"][aria-modal="true"]',
+  // 이모티콘 팝업 헤더 (리사이즈 핸들)
+  popupHeader:
+    '[class*="popup_header"],' +
+    '[role="alertdialog"] [class*="_header_"]',
+  // 이모티콘 창 열기 버튼
+  emojiOpenButton:
+    '#aside-chatting [class*="button_container"][aria-haspopup="true"],' +
+    '#aside-chatting [class*="_input_button_"][aria-haspopup="true"]',
+  // 채팅 입력 textarea
+  chatInput:
+    '#aside-chatting textarea[class*="live_chatting_input_input"],' +
+    '#aside-chatting textarea[class*="_input_"]',
+};
+
 if (!window.__cheemo_initialized__) {
   window.__cheemo_initialized__ = true;
 
@@ -7,9 +67,7 @@ if (!window.__cheemo_initialized__) {
     if (on) {
       // 다시 켜질 때: 루트 감시 + 필터 바인딩 보장
       ensureChatRootObserver();
-      const root = document.querySelector(
-        "[class*=live_chatting_list_container__],[class*=vod_chatting_list__]",
-      );
+      const root = document.querySelector(CHEEMO_SEL.chatRoot);
       if (root) installChatEmojiFilter(root);
 
       // 이모티콘 크기 조절 기능 다시 켜기
@@ -43,17 +101,13 @@ if (!window.__cheemo_initialized__) {
           );
         }
       } catch {}
-      const root = document.querySelector(
-        "[class*=live_chatting_list_container__],[class*=vod_chatting_list__]",
-      );
+      const root = document.querySelector(CHEEMO_SEL.chatRoot);
       if (root) {
         root.querySelectorAll("img").forEach((img) => {
           img.style.display = "";
         });
         root
-          .querySelectorAll(
-            "[class*=live_chatting_message_button__], [class*=live_chatting_scroll_message__]",
-          )
+          .querySelectorAll(CHEEMO_SEL.messageEmojiHolder)
           .forEach((btn) => {
             btn.style.display = "";
           });
@@ -223,7 +277,7 @@ function recomputeGrid(sizePx) {
   const cell = Math.max(sizePx + 8, 24);
   const rowGap = 6;
 
-  const container = document.querySelector("[class*=emoticon_list__]");
+  const container = document.querySelector(CHEEMO_SEL.emojiList);
 
   let n = 1,
     colGap = 6;
@@ -236,27 +290,34 @@ function recomputeGrid(sizePx) {
     colGap = res.gap;
   }
 
+  // emojiList 셀렉터는 콤마로 구분된 여러 후보(구/신 클래스)를 담고 있으므로,
+  // 각 후보에 동일한 접미사(' img', ' > li' 등)를 붙여 CSS 규칙을 만든다.
+  const sel = (suffix = "") =>
+    CHEEMO_SEL.emojiList.split(",")
+      .map((s) => s.trim() + suffix)
+      .join(", ");
+
   const styleEl = ensureSizeStyleEl();
   styleEl.textContent = `
-     [class*=emoticon_list__] img {
+     ${sel(" img")} {
       width: ${sizePx}px !important;
       height: ${sizePx}px !important;
       display: block;
     }
 
     /* 그리드 칸 크기(열/행)와 간격을 함께 조정 */
-    [class*=emoticon_list__] {
+    ${sel()} {
       display: grid !important;
       grid-template-columns: repeat(auto-fill, ${cell}px) !important;
       grid-auto-rows: ${cell}px !important;
       row-gap: ${rowGap}px !important;
       column-gap: ${colGap}px !important;
       justify-content: start !important;
-      padding: 0 5px; 
+      padding: 0 5px;
     }
 
     /* 각 셀(li)을 셀 크기에 맞춰 정렬 */
-    [class*=emoticon_list__] > li {
+    ${sel(" > li")} {
       width: ${cell}px !important;
       height: ${cell}px !important;
       box-sizing: border-box !important;
@@ -267,14 +328,14 @@ function recomputeGrid(sizePx) {
     }
 
     /* 삭제 버튼을 항상 좌상단(또는 우상단) 고정 */
-    [class*=emoticon_list__] > li .emoji-delete-btn {
+    ${sel(" > li .emoji-delete-btn")} {
       width: ${del}px;
       height: ${del}px;
       line-height: ${del - 2}px;
       font-size: ${delFont}px;
     }
 
-    [class*=emoticon_list__] > li .emoji-delete-btn > svg {
+    ${sel(" > li .emoji-delete-btn > svg")} {
       width: ${sizePx < 28 ? 4 : sizePx < 40 ? 6 : 8}px;
       height: ${sizePx < 28 ? 4 : sizePx < 40 ? 6 : 8}px;
     }
@@ -299,7 +360,7 @@ function ensureContainerObserver() {
   if (__cheemo_container_observer) return;
 
   __cheemo_container_observer = new MutationObserver(() => {
-    const container = document.querySelector("[class*=emoticon_list__]");
+    const container = document.querySelector(CHEEMO_SEL.emojiList);
     if (container) {
       // 컨테이너가 나타나는 즉시 현재 크기로 재계산
       recomputeGrid(__cheemo_sizePx);
@@ -311,7 +372,7 @@ function ensureContainerObserver() {
   });
 
   // 이미 존재한다면 즉시 1회 실행
-  if (document.querySelector("[class*=emoticon_list__]")) {
+  if (document.querySelector(CHEEMO_SEL.emojiList)) {
     recomputeGrid(__cheemo_sizePx);
   }
 }
@@ -343,9 +404,7 @@ function updateEmojiVisibility(imgEl) {
   const key = emojiKeyFromSrc(imgEl.src);
   const blocked = EMOJI_BLOCKSET.has(key);
 
-  const btn = imgEl.closest(
-    "[class*=live_chatting_message_button__], [class*=live_chatting_scroll_message__]",
-  );
+  const btn = imgEl.closest(CHEEMO_SEL.messageEmojiHolder);
   if (btn) {
     // 버튼 단위로 숨김/복원
     btn.style.display = blocked ? "none" : "";
@@ -369,9 +428,7 @@ function unlockDisabledButtons(baseNode) {
   // baseNode 내부의 버튼들 탐색
   if (baseNode.querySelectorAll) {
     baseNode
-      .querySelectorAll(
-        "button[disabled][class*='live_chatting_message_button__']",
-      )
+      .querySelectorAll(CHEEMO_SEL.disabledMessageButton)
       .forEach((btn) => {
         btn.removeAttribute("disabled");
         btn.style.pointerEvents = "auto";
@@ -403,12 +460,7 @@ function installChatEmojiFilter(root) {
     if (!CONTEXT_ALIVE || !chrome?.runtime?.id) return;
     const target = e.target;
     if (!(target instanceof HTMLImageElement)) return;
-    if (
-      !target.closest(
-        "[class*=live_chatting_message_button__],[class*=live_chatting_scroll_message__]",
-      )
-    )
-      return;
+    if (!target.closest(CHEEMO_SEL.messageContainer)) return;
     if (!e.altKey) return;
 
     e.preventDefault();
@@ -424,11 +476,7 @@ function installChatEmojiFilter(root) {
   root.addEventListener("click", handler, true);
 
   // 초기 스캔
-  root
-    .querySelectorAll(
-      "[class*=live_chatting_message_text__] img, [class*=live_chatting_scroll_message__] img",
-    )
-    .forEach(updateEmojiVisibility);
+  root.querySelectorAll(CHEEMO_SEL.messageEmojiImg).forEach(updateEmojiVisibility);
 
   const mo = new MutationObserver((muts) => {
     for (const m of muts) {
@@ -437,17 +485,11 @@ function installChatEmojiFilter(root) {
 
         unlockDisabledButtons(node);
 
-        if (
-          node.matches(
-            "[class*=live_chatting_message_text__], [class*=live_chatting_message_button__], [class*=live_chatting_scroll_message__]",
-          )
-        ) {
+        if (node.matches(CHEEMO_SEL.messageContainer)) {
           node.querySelectorAll("img").forEach(updateEmojiVisibility);
         } else {
           node
-            .querySelectorAll?.(
-              "[class*=live_chatting_message_text__] img, [class*=live_chatting_message_button__] img, [class*=live_chatting_scroll_message__] img",
-            )
+            .querySelectorAll?.(CHEEMO_SEL.messageEmojiImg)
             .forEach(updateEmojiVisibility);
         }
       });
@@ -574,7 +616,7 @@ function installChatEmojiFilter(root) {
 
         if (namespace === "local" && changes.emoticonOrder) {
           // 재정렬 가드 해제
-          const container = document.querySelector(".flicking-camera");
+          const container = document.querySelector(CHEEMO_SEL.flickingCamera);
           if (container) container.removeAttribute("data-reordered");
           // DOM 안정화 후 강제 재정렬
           requestAnimationFrame(() => {
@@ -587,13 +629,9 @@ function installChatEmojiFilter(root) {
         if (namespace === "local" && changes.chzzkEmojiBlocklist) {
           EMOJI_BLOCKSET = new Set(changes.chzzkEmojiBlocklist.newValue || []);
           // 반영: 현재 표시 중인 img들 다시 스캔(간단히 루트 재스캔)
-          const root = document.querySelector(
-            "[class*=live_chatting_list_container__],[class*=vod_chatting_list__]",
-          );
+          const root = document.querySelector(CHEEMO_SEL.chatRoot);
           root
-            ?.querySelectorAll(
-              "[class*=live_chatting_message_text__] img, [class*=live_chatting_scroll_message__] img",
-            )
+            ?.querySelectorAll(CHEEMO_SEL.messageEmojiImg)
             .forEach(updateEmojiVisibility);
         }
       });
@@ -642,7 +680,7 @@ function installChatEmojiFilter(root) {
      */
     async reorderEmoticonCategories() {
       // 1. 이모티콘들을 담고 있는 부모 컨테이너를 찾음
-      const container = document.querySelector(".flicking-camera");
+      const container = document.querySelector(CHEEMO_SEL.flickingCamera);
       if (!container) {
         return;
       }
@@ -655,7 +693,10 @@ function installChatEmojiFilter(root) {
 
       // 순서를 변경할 대상 아이템(id를 가진 버튼)들이 실제로 DOM에 존재하는지 확인
       const itemsToReorder = container.querySelectorAll(
-        "[class*='emoticon_flicking_item__'] button[id]",
+        CHEEMO_SEL.flickingItem
+          .split(",")
+          .map((s) => s.trim() + " button[id]")
+          .join(", "),
       );
       if (itemsToReorder.length === 0) {
         // 아직 이모티콘 팩 아이템들이 렌더링되지 않았으므로,
@@ -676,7 +717,7 @@ function installChatEmojiFilter(root) {
       // Key: 버튼 ID, Value: 상위 div 요소 (emoticon_flicking_item__YElNj)
       const itemMap = new Map();
       container
-        .querySelectorAll("[class*='emoticon_flicking_item__']")
+        .querySelectorAll(CHEEMO_SEL.flickingItem)
         .forEach((itemDiv) => {
           const button = itemDiv.querySelector("button[id]");
           if (button) {
@@ -785,9 +826,7 @@ function installChatEmojiFilter(root) {
 
       // '리사이즈 중'이 아닐 때만 저장된 높이를 적용하도록 수정
       if (!this.isResizing) {
-        const popupContainer = container.closest(
-          '#aside-chatting [class*="popup_container"]',
-        );
+        const popupContainer = container.closest(CHEEMO_SEL.popupContainer);
         if (popupContainer) {
           // 저장된 높이를 적용하기 직전에 부드러운 효과를 활성화
           popupContainer.classList.add("smooth-transition");
@@ -1189,15 +1228,11 @@ function installChatEmojiFilter(root) {
      */
     handleResizeMouseDown(e) {
       // 클릭된 대상이 팝업 헤더가 아니면 무시
-      const handle = e.target.closest(
-        '#aside-chatting [class*="popup_header"]',
-      );
+      const handle = e.target.closest(CHEEMO_SEL.popupHeader);
       if (!handle) return;
 
       // 리사이즈할 대상인 팝업 컨테이너를 찾음
-      const popupContainer = handle.closest(
-        '#aside-chatting [class*="popup_container"]',
-      );
+      const popupContainer = handle.closest(CHEEMO_SEL.popupContainer);
       if (!popupContainer) return;
 
       e.preventDefault();
@@ -1299,9 +1334,7 @@ function installChatEmojiFilter(root) {
       }
 
       // 3. 이모티콘 버튼을 찾음
-      const emoticonButton = document.querySelector(
-        '#aside-chatting [class*="button_container"][aria-haspopup="true"]',
-      );
+      const emoticonButton = document.querySelector(CHEEMO_SEL.emojiOpenButton);
 
       // 4. 버튼이 존재하면 클릭 이벤트를 실행
       if (emoticonButton) {
@@ -1324,9 +1357,7 @@ function installChatEmojiFilter(root) {
         return;
       }
 
-      const emoticonButton = document.querySelector(
-        '#aside-chatting [class*="button_container"][aria-haspopup="true"]',
-      );
+      const emoticonButton = document.querySelector(CHEEMO_SEL.emojiOpenButton);
       if (!emoticonButton) {
         return;
       }
@@ -1375,9 +1406,7 @@ function installChatEmojiFilter(root) {
         target.tagName === "PRE" && target.isContentEditable;
       const isEmpty = target.textContent.trim() === "";
 
-      const emoticonButton = document.querySelector(
-        '#aside-chatting [class*="button_container"][aria-haspopup="true"]',
-      );
+      const emoticonButton = document.querySelector(CHEEMO_SEL.emojiOpenButton);
 
       // case 1: 비어있는 채팅 입력창에서 ESC를 누른 경우
       if (isEditablePre && isEmpty) {
@@ -1422,9 +1451,7 @@ function installChatEmojiFilter(root) {
         return;
       }
 
-      const textarea = document.querySelector(
-        '#aside-chatting textarea[class*="live_chatting_input_input"]',
-      );
+      const textarea = document.querySelector(CHEEMO_SEL.chatInput);
 
       if (!textarea || textarea.placeholder.includes("(J)")) {
         return;
@@ -1470,9 +1497,7 @@ function installChatEmojiFilter(root) {
         return;
       }
 
-      const textarea = document.querySelector(
-        '#aside-chatting textarea[class*="live_chatting_input_input"]',
-      );
+      const textarea = document.querySelector(CHEEMO_SEL.chatInput);
 
       if (!textarea) {
         return;
@@ -1505,9 +1530,7 @@ window.myEmoticonExtensionInstance = window.emoticonExtension;
   const { isPaused = false } = await chrome.storage.local.get("isPaused");
   setEnabled(!isPaused); // 시작 시 ON/OFF 반영
 
-  const root = document.querySelector(
-    "[class*=live_chatting_list_container__],[class*=vod_chatting_list__]",
-  );
+  const root = document.querySelector(CHEEMO_SEL.chatRoot);
   if (root) installChatEmojiFilter(root); // 초기 페이지에서도 즉시 바인딩
 })();
 
@@ -1515,9 +1538,7 @@ function ensureChatRootObserver() {
   if (__cheemo_chat_root_observer) return;
 
   const rebind = () => {
-    const root = document.querySelector(
-      "[class*=live_chatting_list_container__],[class*=vod_chatting_list__]",
-    );
+    const root = document.querySelector(CHEEMO_SEL.chatRoot);
     if (!root || root === __cheemo_chat_root) return;
 
     // 이전 루트에 붙어 있던 리스너/옵저버 정리
@@ -1543,9 +1564,7 @@ function ensureChatRootObserver() {
 
     // 블록셋이 이미 로드되어 있다면 즉시 한 번 더 전체 적용
     __cheemo_chat_root
-      .querySelectorAll(
-        "[class*=live_chatting_message_text__] img, [class*=live_chatting_scroll_message__] img",
-      )
+      .querySelectorAll(CHEEMO_SEL.messageEmojiImg)
       .forEach(updateEmojiVisibility);
   };
 
